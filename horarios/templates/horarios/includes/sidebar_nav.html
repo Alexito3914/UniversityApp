@@ -27,9 +27,17 @@
     <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='users' %}</span>
     <span>Titulaciones</span>
   </a>
-  <a class="nav-item {% if active_page == 'ofertas' %}active{% endif %}" href="{% url 'horarios:subject_offering_create' %}">
+  <a class="nav-item {% if active_page == 'importar' %}active{% endif %}" href="{% url 'horarios:excel_import' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='report' %}</span>
+    <span>Importar Excel</span>
+  </a>
+  <a class="nav-item {% if active_page == 'ofertas' %}active{% endif %}" href="{% url 'horarios:degree_list' %}">
     <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='list' %}</span>
     <span>Ofertas docentes</span>
+  </a>
+  <a class="nav-item {% if active_page == 'disponibilidad' %}active{% endif %}" href="{% url 'horarios:professor_availability' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='clock' %}</span>
+    <span>Disponibilidad</span>
   </a>
   <div class="sidebar-section">Análisis</div>
   <a class="nav-item {% if active_page == 'informes' %}active{% endif %}" href="{% url 'horarios:reports' %}">

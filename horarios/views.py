@@ -19,8 +19,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.urls import reverse
 
+from .catalog import provision_courses_for_degree
 from .excel_grid import build_schedule_workbook, workbook_to_bytes
-from .forms import ProfessorAvailabilityForm, ScheduleEntryForm, ScheduleForm, SubjectOfferingForm
+from .forms import (
+    DegreeProgramForm, ExcelImportForm, ProfessorAvailabilityForm, ScheduleEntryForm, ScheduleForm,
+    SubjectForm, SubjectOfferingForm,
+)
+from .excel_import import ExcelImportError, HorariosExcelImporter
 from .models import (
     AcademicYear, Course, DegreeProgram, Enrollment, Professor, Schedule,
     ScheduleEntry, Student, Subject, SubjectOffering, TimeSlotConfig, UserProfile,
@@ -952,25 +957,263 @@ def professor_availability(request):
 
 
 @login_required
+def excel_import_view(request):
+    """El decanato sube un Excel con asignaturas/ofertas y genera horarios."""
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para importar datos.')
+        return redirect('horarios:dashboard')
+
+    last_stats = request.session.pop('excel_import_stats', None)
+    if request.method == 'POST':
+        form = ExcelImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            year = form.cleaned_data['academic_year']
+            try:
+                stats = HorariosExcelImporter(
+                    year.name,
+                    clear_eps=form.cleaned_data['clear_eps'],
+                    auto_generate=form.cleaned_data['auto_generate'],
+                ).run(form.cleaned_data['excel_file'])
+            except ExcelImportError as exc:
+                messages.error(request, str(exc))
+            else:
+                _audit(request, 'excel.import', json.dumps(stats, default=str))
+                request.session['excel_import_stats'] = stats
+                messages.success(
+                    request,
+                    f'Excel importado: {stats["offerings"]} ofertas, '
+                    f'{stats["rows_processed"]} filas, titulaciones {", ".join(stats["degrees"])}.',
+                )
+                if stats.get('generated'):
+                    parts = [f'{sem}: {d["created"]} sesiones' for sem, d in stats['generated'].items()]
+                    messages.info(request, 'Horarios generados — ' + ', '.join(parts))
+                return redirect('horarios:excel_import')
+    else:
+        form = ExcelImportForm()
+
+    return render(request, 'horarios/excel_import.html', {
+        'form': form,
+        'last_stats': last_stats,
+        'user_role': role,
+        'active_page': 'importar',
+    })
+
+
+@login_required
 def subject_offering_create(request):
     role = _get_user_role(request)
     if not _can_manage(role):
         messages.error(request, 'No tienes permisos para esta acción.')
         return redirect('horarios:dashboard')
+    degree = None
+    degree_pk = request.GET.get('degree') or request.POST.get('degree')
+    if degree_pk:
+        degree = DegreeProgram.objects.filter(pk=degree_pk, is_active=True).first()
+    redirect_to = reverse('horarios:degree_detail', kwargs={'pk': degree.pk}) if degree else reverse('horarios:degree_list')
     if request.method == 'POST':
-        form = SubjectOfferingForm(request.POST)
+        form = SubjectOfferingForm(request.POST, degree=degree)
         if form.is_valid():
             offering = form.save()
             _audit(request, 'subject_offering.create', str(offering.pk))
-            messages.success(request, f'Oferta "{offering}" creada correctamente.')
-            return redirect('horarios:degree_list')
+            messages.success(request, f'Oferta «{offering.subject.code}» creada correctamente.')
+            return redirect(redirect_to)
     else:
-        form = SubjectOfferingForm()
+        form = SubjectOfferingForm(degree=degree)
     return render(request, 'horarios/subject_offering_form.html', {
         'form': form,
-        'action': 'Crear oferta de asignatura',
+        'action': 'Crear oferta docente',
+        'degree': degree,
+        'cancel_url': redirect_to,
         'user_role': role,
         'active_page': 'ofertas',
+    })
+
+
+@login_required
+def subject_offering_update(request, pk):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    offering = get_object_or_404(SubjectOffering.objects.select_related('course__degree_program'), pk=pk)
+    degree = offering.course.degree_program
+    if request.method == 'POST':
+        form = SubjectOfferingForm(request.POST, instance=offering, degree=degree)
+        if form.is_valid():
+            form.save()
+            _audit(request, 'subject_offering.update', str(offering.pk))
+            messages.success(request, 'Oferta actualizada.')
+            return redirect('horarios:degree_detail', pk=degree.pk)
+    else:
+        form = SubjectOfferingForm(instance=offering, degree=degree)
+    return render(request, 'horarios/subject_offering_form.html', {
+        'form': form,
+        'action': 'Editar oferta docente',
+        'degree': degree,
+        'cancel_url': reverse('horarios:degree_detail', kwargs={'pk': degree.pk}),
+        'user_role': role,
+        'active_page': 'ofertas',
+    })
+
+
+@login_required
+def subject_offering_delete(request, pk):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    offering = get_object_or_404(SubjectOffering.objects.select_related('course__degree_program'), pk=pk)
+    degree_pk = offering.course.degree_program_id
+    if request.method == 'POST':
+        _audit(request, 'subject_offering.delete', str(offering.pk))
+        offering.delete()
+        messages.success(request, 'Oferta eliminada.')
+    return redirect('horarios:degree_detail', pk=degree_pk)
+
+
+@login_required
+def degree_create(request):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    if request.method == 'POST':
+        form = DegreeProgramForm(request.POST, is_create=True)
+        if form.is_valid():
+            degree = form.save()
+            _audit(request, 'degree.create', str(degree.pk))
+            messages.success(
+                request,
+                f'Titulación «{degree.code}» creada. Añade asignaturas y ofertas docentes cuando quieras.',
+            )
+            return redirect('horarios:degree_detail', pk=degree.pk)
+    else:
+        form = DegreeProgramForm(is_create=True)
+    return render(request, 'horarios/degree_form.html', {
+        'form': form,
+        'action': 'Nueva titulación',
+        'user_role': role,
+        'active_page': 'titulaciones',
+    })
+
+
+@login_required
+def degree_update(request, pk):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    degree = get_object_or_404(DegreeProgram, pk=pk)
+    if request.method == 'POST':
+        form = DegreeProgramForm(request.POST, instance=degree, is_create=False)
+        if form.is_valid():
+            form.save()
+            _audit(request, 'degree.update', str(degree.pk))
+            messages.success(request, 'Titulación actualizada.')
+            return redirect('horarios:degree_detail', pk=degree.pk)
+    else:
+        form = DegreeProgramForm(instance=degree, is_create=False)
+    return render(request, 'horarios/degree_form.html', {
+        'form': form,
+        'action': 'Editar titulación',
+        'degree': degree,
+        'user_role': role,
+        'active_page': 'titulaciones',
+    })
+
+
+@login_required
+def degree_detail(request, pk):
+    role = _get_user_role(request)
+    if role == 'STUD':
+        return redirect('horarios:student_schedule_setup')
+    degree = get_object_or_404(DegreeProgram, pk=pk)
+    current_year = AcademicYear.objects.filter(is_current=True).first()
+    courses = degree.courses.filter(academic_year=current_year).order_by('number') if current_year else Course.objects.none()
+    if current_year and not courses.exists():
+        provision_courses_for_degree(degree, current_year)
+        courses = degree.courses.filter(academic_year=current_year).order_by('number')
+    subjects = Subject.objects.filter(degree_programs=degree).order_by('code')
+    offerings = SubjectOffering.objects.filter(
+        course__degree_program=degree,
+        course__academic_year=current_year,
+    ).select_related('subject', 'course', 'professor', 'classroom').order_by(
+        'course__number', 'semester', 'subject__code',
+    ) if current_year else SubjectOffering.objects.none()
+    context = {
+        'active_page': 'titulaciones',
+        'degree': degree,
+        'current_year': current_year,
+        'courses': courses,
+        'subjects': subjects,
+        'offerings': offerings,
+        'can_manage': _can_manage(role),
+        'user_role': role,
+    }
+    return render(request, 'horarios/degree_detail.html', context)
+
+
+@login_required
+def subject_create(request):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    degree = None
+    degree_pk = request.GET.get('degree') or request.POST.get('degree')
+    if degree_pk:
+        degree = DegreeProgram.objects.filter(pk=degree_pk).first()
+    redirect_to = reverse('horarios:degree_detail', kwargs={'pk': degree.pk}) if degree else reverse('horarios:degree_list')
+    if request.method == 'POST':
+        form = SubjectForm(request.POST, degree=degree)
+        if form.is_valid():
+            subject = form.save()
+            _audit(request, 'subject.create', str(subject.pk))
+            messages.success(request, f'Asignatura «{subject.code}» creada. Asigna profesor y aula en la oferta docente.')
+            if degree:
+                return redirect(f"{reverse('horarios:subject_offering_create')}?degree={degree.pk}")
+            return redirect(redirect_to)
+    else:
+        form = SubjectForm(degree=degree)
+    return render(request, 'horarios/subject_form.html', {
+        'form': form,
+        'action': 'Nueva asignatura',
+        'degree': degree,
+        'cancel_url': redirect_to,
+        'user_role': role,
+        'active_page': 'titulaciones',
+    })
+
+
+@login_required
+def subject_update(request, pk):
+    role = _get_user_role(request)
+    if not _can_manage(role):
+        messages.error(request, 'No tienes permisos para esta acción.')
+        return redirect('horarios:dashboard')
+    subject = get_object_or_404(Subject, pk=pk)
+    degree = subject.degree_programs.first()
+    if request.method == 'POST':
+        form = SubjectForm(request.POST, instance=subject)
+        if form.is_valid():
+            form.save()
+            _audit(request, 'subject.update', str(subject.pk))
+            messages.success(request, 'Asignatura actualizada.')
+            if degree:
+                return redirect('horarios:degree_detail', pk=degree.pk)
+            return redirect('horarios:degree_list')
+    else:
+        form = SubjectForm(instance=subject, degree=degree)
+    cancel = reverse('horarios:degree_detail', kwargs={'pk': degree.pk}) if degree else reverse('horarios:degree_list')
+    return render(request, 'horarios/subject_form.html', {
+        'form': form,
+        'action': 'Editar asignatura',
+        'subject': subject,
+        'degree': degree,
+        'cancel_url': cancel,
+        'user_role': role,
+        'active_page': 'titulaciones',
     })
 
 
@@ -989,7 +1232,8 @@ def degree_list(request):
         'active_page': 'titulaciones',
         'degrees': degrees,
         'q': q,
-        'user_role': _get_user_role(request),
+        'user_role': role,
+        'can_manage': _can_manage(role),
     }
     return render(request, 'horarios/degree_list.html', context)
 

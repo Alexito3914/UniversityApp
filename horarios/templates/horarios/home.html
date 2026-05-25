@@ -73,6 +73,8 @@
       <div class="row" style="flex-wrap:wrap;gap:8px;">
         <a class="btn" href="{% url 'horarios:schedule_list' %}">📋 Horarios</a>
         <a class="btn" href="{% url 'horarios:schedule_list' %}?status=REVIEW">✓ Aprobaciones</a>
+        <a class="btn btn-primary" href="{% url 'horarios:excel_import' %}">📥 Importar Excel</a>
+        <a class="btn" href="{% url 'horarios:degree_list' %}">🎓 Titulaciones</a>
         <a class="btn" href="{% url 'horarios:professor_availability' %}">⏰ Disponibilidad</a>
         {% if user_role == 'DEAN' or user_role == 'IT' %}
         <a class="btn btn-ghost" href="{% url 'horarios:configuration' %}">⚙ Marco temporal</a>

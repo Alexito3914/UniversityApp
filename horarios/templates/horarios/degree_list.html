@@ -6,57 +6,43 @@
     <div class="crumb"><b>Titulaciones</b> · Catálogo activo</div>
     <h1>Titulaciones y cursos</h1>
   </div>
+  {% if can_manage %}
+  <div class="actions">
+    <a class="btn-brand" href="{% url 'horarios:degree_create' %}" style="text-decoration:none;">+ Nueva titulación</a>
+  </div>
+  {% endif %}
 </div>
+
+{% if can_manage %}
+<div class="card-x" style="margin-bottom:16px;">
+  <div class="body" style="font-size:13px;">
+    El decanato puede crear titulaciones, añadir asignaturas y ofertas docentes, y consultar la
+    <a href="{% url 'horarios:professor_availability' %}">disponibilidad del profesorado</a>.
+  </div>
+</div>
+{% endif %}
 
 <div class="metric-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
   {% for degree in degrees %}
-  <div class="card-x"><div class="body" style="display:flex;align-items:center;gap:12px;">
-    {% with code=degree.code %}
-    <div style="width:46px;height:46px;border-radius:10px;
-                {% if 'INF' in code and 'ROB' in code %}background:var(--t-dg-soft);color:var(--t-dg);
-                {% elif 'INF' in code or code == 'GII' %}background:var(--t-info-soft);color:var(--t-info);
-                {% elif 'ROB' in code %}background:var(--t-rob-soft);color:var(--t-rob);
-                {% elif 'TEL' in code %}background:var(--t-tel-soft);color:var(--t-tel);
-                {% else %}background:var(--t-info-soft);color:var(--t-info);{% endif %}
-                display:grid;place-items:center;font-weight:800;">{{ degree.code|slice:":2" }}</div>
-    {% endwith %}
-    <div>
-      <div style="font-weight:700;">{{ degree.name }}</div>
-      <div style="color:var(--ink-soft);font-size:12px;">{{ degree.code }} · {{ degree.courses.count }} curso{{ degree.courses.count|pluralize }}</div>
+  <a href="{% url 'horarios:degree_detail' degree.pk %}" class="card-x" style="text-decoration:none;color:inherit;">
+    <div class="body" style="display:flex;align-items:center;gap:12px;">
+      {% with code=degree.code %}
+      <div style="width:46px;height:46px;border-radius:10px;
+                  {% if 'INF' in code and 'ROB' in code %}background:var(--t-dg-soft);color:var(--t-dg);
+                  {% elif 'INF' in code or code == 'GII' %}background:var(--t-info-soft);color:var(--t-info);
+                  {% elif 'ROB' in code %}background:var(--t-rob-soft);color:var(--t-rob);
+                  {% elif 'TEL' in code %}background:var(--t-tel-soft);color:var(--t-tel);
+                  {% else %}background:var(--t-info-soft);color:var(--t-info);{% endif %}
+                  display:grid;place-items:center;font-weight:800;">{{ degree.code|slice:":2" }}</div>
+      {% endwith %}
+      <div>
+        <div style="font-weight:700;">{{ degree.name }}</div>
+        <div style="color:var(--ink-soft);font-size:12px;">{{ degree.code }} · {{ degree.courses.count }} curso{{ degree.courses.count|pluralize }}</div>
+      </div>
     </div>
-  </div></div>
+  </a>
   {% empty %}
-  <div class="card-x"><div class="body">No hay titulaciones activas.</div></div>
-  {% endfor %}
-</div>
-
-<div style="margin-top:18px;">
-  {% for degree in degrees %}
-  <div class="card-x" style="margin-bottom:14px;">
-    <div class="head"><span class="title">{{ degree.code }} — {{ degree.name }}</span></div>
-    <table class="tbl">
-      <thead><tr><th>Curso</th><th>Turno</th><th>Asignaturas y profesores</th></tr></thead>
-      <tbody>
-        {% for course in degree.courses.all %}
-        <tr>
-          <td><b>{{ course.number }}º</b></td>
-          <td><span class="pill draft">{{ course.get_shift_display }}</span></td>
-          <td>
-            {% for offering in course.subject_offerings.all %}
-              <div style="font-size:12.5px;padding:4px 0;">
-                <b>{{ offering.subject.code }}</b> — {{ offering.subject.name }}
-                <span style="color:var(--ink-soft);">· {{ offering.professor }}</span>
-                {% if offering.subject.is_shared %}<span class="badge-trans" style="position:static;display:inline-block;margin-left:6px;">Transversal</span>{% endif %}
-              </div>
-            {% empty %}
-              <span style="color:var(--ink-soft);font-size:12px;">Sin ofertas asignadas</span>
-            {% endfor %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <div class="card-x"><div class="body">No hay titulaciones activas. {% if can_manage %}<a href="{% url 'horarios:degree_create' %}">Crear la primera</a>{% endif %}</div></div>
   {% endfor %}
 </div>
 {% endblock %}

@@ -2,7 +2,7 @@
 {% block title %}{{ action }} | UCJC{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><div class="crumb"><b>{{ action }}</b>{% if degree %} · {{ degree.name }}{% endif %}</div><h1>{{ action }}</h1></div>
+  <div><div class="crumb"><b>{{ action }}</b>{% if degree %} · {{ degree.code }}{% endif %}</div><h1>{{ action }}</h1></div>
 </div>
 <div class="card-x" style="max-width:560px;">
   <form method="post" class="body">
@@ -16,8 +16,8 @@
     </div>
     {% endfor %}
     <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;">
-      <button class="btn-brand" type="submit">Guardar oferta</button>
-      <a class="btn-ghost" href="{{ cancel_url|default:'/titulaciones/' }}" style="text-decoration:none;display:inline-flex;align-items:center;">Cancelar</a>
+      <button class="btn-brand" type="submit">Guardar asignatura</button>
+      <a class="btn-ghost" href="{{ cancel_url }}" style="text-decoration:none;display:inline-flex;align-items:center;">Cancelar</a>
     </div>
   </form>
 </div>

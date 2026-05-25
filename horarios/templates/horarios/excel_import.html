@@ -1,0 +1,65 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Importar Excel | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Decanato</b> · Importar Excel</div>
+    <h1>Subir listado de asignaturas</h1>
+    <p style="color:var(--ink-soft);max-width:640px;">
+      Sube el Excel con las asignaturas, profesores y cuatrimestres. Los datos se guardan en la base de datos
+      y puedes generar los horarios del 1º y 2º cuatrimestre al instante.
+    </p>
+  </div>
+</div>
+
+<div class="card-x" style="max-width:640px;margin-bottom:16px;">
+  <div class="body" style="font-size:13px;color:var(--ink-soft);">
+    <strong>Formatos admitidos:</strong>
+    <ul style="margin:8px 0 0;padding-left:18px;">
+      <li><code>HORARIOS_25_26.xlsx</code> — hoja «Listado» (Tomás)</li>
+      <li><code>listado_eps_4_grados.xlsx</code> — hoja «Listado 4 grados»</li>
+    </ul>
+    <p style="margin-top:10px;">Columna <strong>D</strong> = cuatrimestre (1 o 2). HORARIO 1/2 = sesiones semanales.</p>
+  </div>
+</div>
+
+<div class="card-x" style="max-width:640px;">
+  <form method="post" enctype="multipart/form-data" class="body">
+    {% csrf_token %}
+    {% for field in form %}
+    <div style="margin-bottom:14px;">
+      <label class="form-label">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div style="color:#8B0000;font-size:12px;">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;">
+      <button class="btn-brand" type="submit">Importar y guardar</button>
+      <a class="btn-ghost" href="{% url 'horarios:degree_list' %}" style="text-decoration:none;display:inline-flex;align-items:center;">Ver titulaciones</a>
+      <a class="btn-ghost" href="{% url 'horarios:schedule_list' %}" style="text-decoration:none;display:inline-flex;align-items:center;">Ver horarios</a>
+    </div>
+  </form>
+</div>
+
+{% if last_stats %}
+<div class="card-x" style="max-width:640px;margin-top:16px;">
+  <div class="head"><span class="title">Última importación</span></div>
+  <div class="body" style="font-size:13px;">
+    <p><strong>Año:</strong> {{ last_stats.year }}</p>
+    <p><strong>Filas procesadas:</strong> {{ last_stats.rows_processed }}</p>
+    <p><strong>Ofertas docentes:</strong> {{ last_stats.offerings }}</p>
+    <p><strong>Titulaciones:</strong> {{ last_stats.degrees|join:", " }}</p>
+    {% if last_stats.generated %}
+    <p><strong>Horarios generados:</strong></p>
+    <ul>
+      {% for sem, data in last_stats.generated.items %}
+      <li>{{ sem }}: {{ data.created }} sesiones creadas{% if data.unresolved %} ({{ data.unresolved }} pendientes){% endif %}
+        — <a href="{% url 'horarios:schedule_detail' data.schedule_id %}">Abrir editor</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

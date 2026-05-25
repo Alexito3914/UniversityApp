@@ -21,14 +21,25 @@ def horario_code_active(value):
     return text not in ('', 'True', 'False', 'None')
 
 
-def semester_plans_from_horario_columns(h1, h2):
-    """Deriva cuatrimestres y sesiones/semana según columnas HORARIO 1 / HORARIO 2 del Excel."""
-    plans = []
-    if horario_code_active(h1):
-        plans.append((SEMESTER_S1, 1))
-    if horario_code_active(h2):
-        plans.append((SEMESTER_S2, 1))
-    if not plans:
-        weekly = 2 if horario_code_active(h1) or horario_code_active(h2) else 2
-        plans.append((SEMESTER_S1, weekly))
-    return plans
+def weekly_sessions_from_horario_columns(h1, h2):
+    """
+    Columnas HORARIO 1 / HORARIO 2 = códigos de franja semanal (M9, L11…).
+    Cada columna rellena implica una sesión de 2 h a la semana en ese cuatrimestre.
+    """
+    count = sum(1 for h in (h1, h2) if horario_code_active(h))
+    return count if count else 2
+
+
+def semester_from_excel_column(value):
+    """Columna «D» del Listado: 1 → primer cuatrimestre, 2 → segundo."""
+    text = str(value).strip() if value is not None else ''
+    if text in ('2', '2.0'):
+        return SEMESTER_S2
+    return SEMESTER_S1
+
+
+def semester_plans_from_horario_columns(h1, h2, *, semester_col=1):
+    """Devuelve [(semestre, sesiones/semana)] para una fila del Listado."""
+    weekly = weekly_sessions_from_horario_columns(h1, h2)
+    semester = semester_from_excel_column(semester_col)
+    return [(semester, weekly)]

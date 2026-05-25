@@ -1,0 +1,82 @@
+{% extends 'horarios/base.html' %}
+{% block title %}{{ degree.code }} | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><a href="{% url 'horarios:degree_list' %}" style="color:inherit;text-decoration:none;">Titulaciones</a> · <b>{{ degree.code }}</b></div>
+    <h1>{{ degree.name }}</h1>
+    {% if current_year %}<p style="color:var(--ink-soft);margin:4px 0 0;">Año académico {{ current_year.name }}</p>{% endif %}
+  </div>
+  {% if can_manage %}
+  <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn-brand" href="{% url 'horarios:subject_create' %}?degree={{ degree.pk }}" style="text-decoration:none;">+ Asignatura</a>
+    <a class="btn" href="{% url 'horarios:subject_offering_create' %}?degree={{ degree.pk }}" style="text-decoration:none;">+ Oferta docente</a>
+    <a class="btn-ghost" href="{% url 'horarios:degree_update' degree.pk %}" style="text-decoration:none;">Editar titulación</a>
+    <a class="btn-ghost" href="{% url 'horarios:professor_availability' %}" style="text-decoration:none;">Disponibilidad profesorado</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if can_manage %}
+<div class="card-x" style="margin-bottom:16px;">
+  <div class="body" style="font-size:13px;color:var(--ink-soft);">
+    Desde aquí el decanato gestiona el grado: crea asignaturas, asigna profesor/aula/cuatrimestre y consulta la disponibilidad del profesorado.
+  </div>
+</div>
+{% endif %}
+
+<div class="metric-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px;">
+  <div class="card-x"><div class="body"><div style="font-size:11px;color:var(--ink-soft);">Cursos</div><div style="font-size:22px;font-weight:800;">{{ courses|length }}</div></div></div>
+  <div class="card-x"><div class="body"><div style="font-size:11px;color:var(--ink-soft);">Asignaturas</div><div style="font-size:22px;font-weight:800;">{{ subjects|length }}</div></div></div>
+  <div class="card-x"><div class="body"><div style="font-size:11px;color:var(--ink-soft);">Ofertas docentes</div><div style="font-size:22px;font-weight:800;">{{ offerings|length }}</div></div></div>
+</div>
+
+<div class="card-x" style="margin-bottom:16px;">
+  <div class="head"><span class="title">Asignaturas del grado</span></div>
+  <table class="tbl">
+    <thead><tr><th>Código</th><th>Nombre</th><th>Sesiones/sem</th><th></th></tr></thead>
+    <tbody>
+      {% for subject in subjects %}
+      <tr>
+        <td><b>{{ subject.code }}</b></td>
+        <td>{{ subject.name }}{% if subject.is_shared %} <span class="badge-trans" style="position:static;display:inline-block;">Trans.</span>{% endif %}</td>
+        <td>{{ subject.weekly_sessions }}</td>
+        <td>{% if can_manage %}<a href="{% url 'horarios:subject_update' subject.pk %}">Editar</a>{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="color:var(--ink-soft);">Sin asignaturas. {% if can_manage %}<a href="{% url 'horarios:subject_create' %}?degree={{ degree.pk }}">Añadir la primera</a>{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card-x">
+  <div class="head"><span class="title">Ofertas docentes (profesor · curso · cuatrimestre)</span></div>
+  <table class="tbl">
+    <thead><tr><th>Asignatura</th><th>Curso</th><th>Cuatrimestre</th><th>Profesor</th><th>Aula</th><th>Ses/sem</th><th></th></tr></thead>
+    <tbody>
+      {% for offering in offerings %}
+      <tr>
+        <td><b>{{ offering.subject.code }}</b><br><span style="font-size:12px;color:var(--ink-soft);">{{ offering.subject.name|truncatechars:40 }}</span></td>
+        <td>{{ offering.course.number }}º</td>
+        <td>{{ offering.get_semester_display }}</td>
+        <td>{{ offering.professor|truncatechars:28 }}</td>
+        <td>{{ offering.classroom.code }}</td>
+        <td>{{ offering.weekly_sessions }}</td>
+        <td style="white-space:nowrap;">
+          {% if can_manage %}
+          <a href="{% url 'horarios:subject_offering_update' offering.pk %}">Editar</a>
+          <form method="post" action="{% url 'horarios:subject_offering_delete' offering.pk %}" style="display:inline;margin-left:8px;" onsubmit="return confirm('¿Eliminar esta oferta?');">
+            {% csrf_token %}
+            <button type="submit" style="background:none;border:none;color:#8B0000;cursor:pointer;padding:0;font:inherit;">Eliminar</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" style="color:var(--ink-soft);">Sin ofertas. {% if can_manage %}<a href="{% url 'horarios:subject_offering_create' %}?degree={{ degree.pk }}">Crear oferta</a> (profesor + aula + cuatrimestre).{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
