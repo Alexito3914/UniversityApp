@@ -63,6 +63,24 @@ class ScheduleManagementViewTests(TestCase):
         self.assertIn('Test A', content)
         self.assertIn('INF-T', content)
 
+    def test_schedule_export_excel_grid(self):
+        import openpyxl
+        from io import BytesIO
+
+        self.client.login(username='dean_sm', password='ucjc1234')
+        response = self.client.get(reverse('horarios:schedule_export_excel', kwargs={'pk': self.schedule.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('spreadsheetml', response['Content-Type'])
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertIn('HORARIOS 1º CUATRIMESTRE', wb.sheetnames)
+        ws = wb['HORARIOS 1º CUATRIMESTRE']
+        flat = ' '.join(
+            str(v) for row in ws.iter_rows(min_row=1, max_row=40, values_only=True) for v in row if v
+        )
+        self.assertIn('GRUPO', flat)
+        self.assertIn('Test A', flat)
+        self.assertIn('LUNES', flat)
+
     def test_schedule_api_json(self):
         self.client.login(username='dean_sm', password='ucjc1234')
         response = self.client.get(reverse('horarios:schedule_api_json', kwargs={'pk': self.schedule.pk}))
@@ -88,6 +106,7 @@ class ScheduleManagementViewTests(TestCase):
         response = self.client.post(reverse('horarios:schedule_update', kwargs={'pk': self.schedule.pk}), {
             'name': 'Horario renombrado',
             'academic_year': self.lab['year'].pk,
+            'semester': 'S1',
         })
         self.assertRedirects(response, reverse('horarios:schedule_list'))
         self.schedule.refresh_from_db()

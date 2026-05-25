@@ -81,6 +81,7 @@ class AuthAndRBACTests(TestCase):
         response = self.client.post(reverse('horarios:schedule_create'), {
             'name': 'Horario IT nuevo',
             'academic_year': self.lab['year'].pk,
+            'semester': 'S1',
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Schedule.objects.filter(name='Horario IT nuevo', status='DRAFT').exists())

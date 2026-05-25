@@ -33,6 +33,7 @@
         <tr>
           <th>Nombre</th>
           <th>Año académico</th>
+          <th>Cuatrimestre</th>
           <th>Estado</th>
           <th>Sesiones</th>
           <th>Creado</th>
@@ -47,6 +48,7 @@
             <div class="mono fs-xs muted">#{{ s.pk }}</div>
           </td>
           <td>{{ s.academic_year.name }}</td>
+          <td>{{ s.get_semester_display }}</td>
           <td>
             <span class="chip chip-status {% if s.status == 'APPROVED' %}chip-ok{% elif s.status == 'REVIEW' %}chip-warn{% elif s.status == 'REJECTED' %}chip-err{% endif %}">
               {{ s.get_status_display }}
@@ -82,7 +84,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6"><div class="empty">No hay horarios. {% if can_manage %}<a href="{% url 'horarios:schedule_create' %}">Crear uno</a>{% endif %}</div></td></tr>
+        <tr><td colspan="7"><div class="empty">No hay horarios. {% if can_manage %}<a href="{% url 'horarios:schedule_create' %}">Crear uno</a>{% endif %}</div></td></tr>
         {% endfor %}
       </tbody>
     </table>

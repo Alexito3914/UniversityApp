@@ -38,6 +38,7 @@
     </p>
     {% else %}
     <h1>Editor horario · {{ schedule.academic_year.name }}
+      <span class="chip chip-status" style="margin-left:8px;vertical-align:middle;background:var(--c-surface-2);">{{ schedule.get_semester_display }}</span>
       <span class="chip chip-status {% if schedule.status == 'APPROVED' %}chip-ok{% elif schedule.status == 'REVIEW' %}chip-warn{% elif schedule.status == 'REJECTED' %}chip-err{% endif %}" style="margin-left:8px;vertical-align:middle;">
         {{ schedule.get_status_display }}
       </span>
@@ -63,7 +64,13 @@
     {% elif is_professor_view %}
     <a class="btn-ghost" href="{% url 'horarios:professor_availability' %}" style="text-decoration:none;">Disponibilidad</a>
     {% else %}
-    <a class="btn-ghost" href="{% url 'horarios:schedule_export_csv' schedule.pk %}" style="text-decoration:none;">📊 CSV</a>
+    {% if sibling_schedule and can_manage %}
+    <a class="btn-ghost" href="{% url 'horarios:schedule_detail' sibling_schedule.pk %}" style="text-decoration:none;">
+      Ver {{ sibling_schedule.get_semester_display|lower }}
+    </a>
+    {% endif %}
+    <a class="btn-ghost" href="{% url 'horarios:schedule_export_csv' schedule.pk %}{% if selected_degree or selected_course %}?{% if selected_degree %}degree={{ selected_degree }}{% endif %}{% if selected_degree and selected_course %}&{% endif %}{% if selected_course %}course={{ selected_course }}{% endif %}{% endif %}" style="text-decoration:none;">📊 CSV</a>
+    <a class="btn-ghost" href="{% url 'horarios:schedule_export_excel' schedule.pk %}{% if selected_degree or selected_course %}?{% if selected_degree %}degree={{ selected_degree }}{% endif %}{% if selected_degree and selected_course %}&{% endif %}{% if selected_course %}course={{ selected_course }}{% endif %}{% endif %}" style="text-decoration:none;">📥 Excel</a>
     {% if can_manage and schedule.status == 'DRAFT' %}
       <a class="btn-brand" href="{% url 'horarios:schedule_entry_create' schedule.pk %}" style="text-decoration:none;display:inline-flex;align-items:center;">+ Añadir sesión</a>
       <form method="post" action="{% url 'horarios:schedule_generate' schedule.pk %}" style="margin:0;" id="genForm">

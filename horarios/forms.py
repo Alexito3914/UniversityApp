@@ -19,14 +19,16 @@ class ScheduleForm(forms.ModelForm):
 
     class Meta:
         model = Schedule
-        fields = ['name', 'academic_year']
+        fields = ['name', 'academic_year', 'semester']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Horario 2026-27 Primer Semestre'}),
             'academic_year': forms.Select(attrs={'class': 'form-select'}),
+            'semester': forms.Select(attrs={'class': 'form-select'}),
         }
         labels = {
             'name': 'Nombre del horario',
             'academic_year': 'Año académico',
+            'semester': 'Cuatrimestre',
         }
 
 
@@ -72,7 +74,8 @@ class ScheduleEntryForm(forms.ModelForm):
         self.schedule = schedule
         if schedule:
             self.fields['subject_offering'].queryset = SubjectOffering.objects.filter(
-                course__academic_year=schedule.academic_year
+                course__academic_year=schedule.academic_year,
+                semester=schedule.semester,
             ).select_related('subject', 'course__degree_program', 'professor', 'classroom')
             self.fields['timeslot'].queryset = TimeSlotConfig.objects.filter(
                 academic_year=schedule.academic_year, is_active=True

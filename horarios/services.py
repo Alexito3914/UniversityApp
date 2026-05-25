@@ -181,7 +181,8 @@ def get_generation_report(schedule):
     if not schedule:
         return rows
     offerings = SubjectOffering.objects.filter(
-        course__academic_year=schedule.academic_year
+        course__academic_year=schedule.academic_year,
+        semester=schedule.semester,
     ).select_related('subject', 'course__degree_program', 'professor', 'classroom')
     planned_counts = dict(
         ScheduleEntry.objects.filter(schedule=schedule)
@@ -190,7 +191,7 @@ def get_generation_report(schedule):
         .values_list('subject_offering_id', 'total')
     )
     for offering in offerings:
-        required = offering.subject.weekly_sessions
+        required = offering.sessions_per_week()
         planned = planned_counts.get(offering.pk, 0)
         rows.append({
             'offering': offering,
@@ -227,7 +228,10 @@ def format_no_offerings_message(schedule, degree_id=None, course_id=None, course
     scope = ' · '.join(scope_parts) if scope_parts else 'el filtro seleccionado'
 
     available = list(
-        SubjectOffering.objects.filter(course__academic_year=schedule.academic_year)
+        SubjectOffering.objects.filter(
+            course__academic_year=schedule.academic_year,
+            semester=schedule.semester,
+        )
         .values_list('course__degree_program__code', 'course__number')
         .distinct()
         .order_by('course__degree_program__code', 'course__number')
@@ -296,7 +300,8 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
 
     # Ofertas ordenadas: primero las más difíciles de encajar (más sesiones)
     offerings_qs = SubjectOffering.objects.filter(
-        course__academic_year=schedule.academic_year
+        course__academic_year=schedule.academic_year,
+        semester=schedule.semester,
     )
     if degree_id:
         offerings_qs = offerings_qs.filter(course__degree_program_id=degree_id)
@@ -332,7 +337,7 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
 
     for offering in offerings:
         existing = planned_per_offering[offering.pk]
-        remaining = max(offering.subject.weekly_sessions - existing, 0)
+        remaining = max(offering.sessions_per_week() - existing, 0)
         if remaining == 0:
             continue
 

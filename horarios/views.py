@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 import datetime
+import re
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.contrib import messages
@@ -18,6 +19,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.urls import reverse
 
+from .excel_grid import build_schedule_workbook, workbook_to_bytes
 from .forms import ProfessorAvailabilityForm, ScheduleEntryForm, ScheduleForm, SubjectOfferingForm
 from .models import (
     AcademicYear, Course, DegreeProgram, Enrollment, Professor, Schedule,
@@ -263,28 +265,39 @@ def schedule_detail(request, pk):
         if schedule.academic_year_id != student_course.academic_year_id:
             messages.error(request, 'Este horario no corresponde a tu año académico.')
             return redirect('horarios:student_my_schedule')
-        if schedule.status != 'APPROVED':
+        published_ids = Schedule.objects.filter(
+            academic_year=student_course.academic_year,
+            status='APPROVED',
+        ).values_list('pk', flat=True)
+        if not published_ids:
             messages.warning(request, 'Este horario aún no está publicado.')
             return redirect('horarios:student_my_schedule')
         degree_filter = str(student_course.degree_program_id)
         course_filter = str(student_course.pk)
         professor_filter = None
+        entries_qs = ScheduleEntry.objects.filter(schedule_id__in=published_ids)
     elif is_professor_view:
         if not linked_professor:
             messages.error(request, 'Tu usuario no está vinculado a un perfil de profesor.')
             return redirect('horarios:home')
-        if schedule.status != 'APPROVED':
+        published_ids = Schedule.objects.filter(
+            academic_year=schedule.academic_year,
+            status='APPROVED',
+        ).values_list('pk', flat=True)
+        if not published_ids:
             messages.warning(request, 'Solo puedes consultar horarios publicados.')
             return redirect('horarios:professor_my_schedule')
         professor_filter = str(linked_professor.pk)
         degree_filter = request.GET.get('degree')
         course_filter = request.GET.get('course')
+        entries_qs = ScheduleEntry.objects.filter(schedule_id__in=published_ids)
     else:
         degree_filter = request.GET.get('degree')
         course_filter = request.GET.get('course')
         professor_filter = request.GET.get('professor')
+        entries_qs = schedule.entries.all()
 
-    entries_qs = schedule.entries.select_related(
+    entries_qs = entries_qs.select_related(
         'subject_offering__subject', 'subject_offering__professor',
         'subject_offering__classroom', 'subject_offering__course__degree_program', 'timeslot'
     )
@@ -319,9 +332,13 @@ def schedule_detail(request, pk):
 
     selected_degree_obj = DegreeProgram.objects.filter(pk=degree_filter).first() if degree_filter else None
     selected_course_obj = Course.objects.select_related('degree_program').filter(pk=course_filter).first() if course_filter else None
+    sibling_schedule = Schedule.objects.filter(
+        academic_year=schedule.academic_year,
+    ).exclude(pk=schedule.pk).order_by('semester').first()
     context = {
         'active_page': 'horarios',
         'schedule': schedule,
+        'sibling_schedule': sibling_schedule,
         'timetable': timetable,
         'morning_times': morning_times,
         'afternoon_times': afternoon_times,
@@ -812,6 +829,23 @@ def schedule_export_csv(request, pk):
             entry.subject_offering.classroom.code, entry.subject_offering.group_name,
         ])
     _audit(request, 'schedule.export.csv', str(schedule.pk))
+    return response
+
+
+@login_required
+def schedule_export_excel(request, pk):
+    schedule = get_object_or_404(Schedule, pk=pk)
+    degree_id = request.GET.get('degree') or None
+    course_id = request.GET.get('course') or None
+    wb = build_schedule_workbook(schedule, degree_id=degree_id, course_id=course_id)
+    safe_name = re.sub(r'[^\w\-]+', '_', schedule.name)[:40]
+    filename = f'horario_{schedule.academic_year.name}_{safe_name}.xlsx'.replace(' ', '_')
+    response = HttpResponse(
+        workbook_to_bytes(wb),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    _audit(request, 'schedule.export.excel', str(schedule.pk))
     return response
 
 

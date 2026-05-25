@@ -22,6 +22,7 @@ urlpatterns = [
     path('horarios/<int:pk>/sesiones/<int:entry_pk>/mover/', views.schedule_entry_move, name='schedule_entry_move'),
     path('horarios/<int:pk>/workflow/<str:action>/', views.schedule_workflow, name='schedule_workflow'),
     path('horarios/<int:pk>/exportar/csv/', views.schedule_export_csv, name='schedule_export_csv'),
+    path('horarios/<int:pk>/exportar/excel/', views.schedule_export_excel, name='schedule_export_excel'),
     path('api/horarios/<int:pk>.json', views.schedule_api_json, name='schedule_api_json'),
     path('disponibilidad/', views.professor_availability, name='professor_availability'),
     path('ofertas/nueva/', views.subject_offering_create, name='subject_offering_create'),

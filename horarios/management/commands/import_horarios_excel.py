@@ -25,6 +25,12 @@ from horarios.models import (
     SubjectOffering,
     TimeSlotConfig,
 )
+from horarios.semesters import (
+    EXCEL_SHEET_TITLES,
+    SEMESTER_S1,
+    SEMESTER_S2,
+    semester_plans_from_horario_columns,
+)
 
 STUDY_MAP = {
     'Gininf': ('INF', 'Grado en Ingeniería Informática'),
@@ -244,7 +250,6 @@ class Command(BaseCommand):
             subj_name = str(row[5] or subj_code).strip()
             doble_val = row[10]
             h1, h2 = row[11], row[12]
-            weekly = _weekly_sessions(h1, h2)
             group = _group_name(study, course_num, doble_val)
 
             raw_name = str(row[9] or '').strip()
@@ -266,15 +271,16 @@ class Command(BaseCommand):
                 code=subj_code,
                 defaults={
                     'name': subj_name[:120],
-                    'weekly_sessions': weekly,
+                    'weekly_sessions': _weekly_sessions(h1, h2),
                     'session_duration_hours': 2,
                     'is_shared': False,
                 },
             )
             if created:
                 subject_count += 1
-            if subject.weekly_sessions != weekly:
-                subject.weekly_sessions = weekly
+            total_weekly = _weekly_sessions(h1, h2)
+            if subject.weekly_sessions != total_weekly:
+                subject.weekly_sessions = total_weekly
                 subject.save(update_fields=['weekly_sessions', 'updated_at'])
 
             deg_code = STUDY_MAP[study][0]
@@ -288,29 +294,37 @@ class Command(BaseCommand):
                 defaults={'name': f'Aula {room_key}', 'capacity': 30},
             )
 
-            SubjectOffering.objects.update_or_create(
-                subject=subject,
-                course=course,
-                group_name=group,
-                defaults={
-                    'professor': prof,
-                    'classroom': classroom,
-                },
-            )
-            offering_count += 1
+            for semester, weekly_sem in semester_plans_from_horario_columns(h1, h2):
+                SubjectOffering.objects.update_or_create(
+                    subject=subject,
+                    course=course,
+                    group_name=group,
+                    semester=semester,
+                    defaults={
+                        'professor': prof,
+                        'classroom': classroom,
+                        'weekly_sessions': weekly_sem,
+                    },
+                )
+                offering_count += 1
 
         double_count = self._build_double_degree_offerings(year)
         offering_count += double_count
 
         schedule_entries = 0
         if options['apply_schedule']:
-            schedule, _ = Schedule.objects.get_or_create(
-                name=f'Horario EPS {options["year"]} (Excel Tomás)',
-                academic_year=year,
-                defaults={'status': 'DRAFT'},
-            )
-            ScheduleEntry.objects.filter(schedule=schedule).delete()
-            schedule_entries = self._import_schedule_grids(wb, year, schedule, prof_by_code)
+            for semester in (SEMESTER_S1, SEMESTER_S2):
+                label = 'Primer' if semester == SEMESTER_S1 else 'Segundo'
+                schedule, _ = Schedule.objects.update_or_create(
+                    name=f'Horario EPS {options["year"]} — {label} cuatrimestre',
+                    academic_year=year,
+                    semester=semester,
+                    defaults={'status': 'DRAFT'},
+                )
+                ScheduleEntry.objects.filter(schedule=schedule).delete()
+                schedule_entries += self._import_schedule_grids(
+                    wb, year, schedule, prof_by_code, semester=semester,
+                )
 
         self.stdout.write(self.style.SUCCESS(
             f'Importación completada · año {year.name} · '
@@ -361,9 +375,11 @@ class Command(BaseCommand):
                     subject=src.subject,
                     course=dg_course,
                     group_name=src.group_name,
+                    semester=src.semester,
                     defaults={
                         'professor': src.professor,
                         'classroom': src.classroom,
+                        'weekly_sessions': src.sessions_per_week(),
                     },
                 )
                 created += 1
@@ -401,16 +417,16 @@ class Command(BaseCommand):
                     is_active=True,
                 )
 
-    def _import_schedule_grids(self, wb, year, schedule, prof_by_code):
-        """Parsea hojas HORARIOS y crea ScheduleEntry."""
+    def _import_schedule_grids(self, wb, year, schedule, prof_by_code, semester=SEMESTER_S1):
+        """Parsea hoja HORARIOS del cuatrimestre indicado y crea ScheduleEntry."""
         slot_index = {}
         for slot in TimeSlotConfig.objects.filter(academic_year=year, is_active=True):
             slot_index[(slot.day_of_week, slot.start_time, slot.end_time)] = slot
 
         offering_index = {}
-        for off in SubjectOffering.objects.filter(course__academic_year=year).select_related(
-            'professor', 'course__degree_program', 'subject',
-        ):
+        for off in SubjectOffering.objects.filter(
+            course__academic_year=year, semester=semester,
+        ).select_related('professor', 'course__degree_program', 'subject'):
             pcode = _prof_code(f'{off.professor.last_name}, {off.professor.first_name}')
             key = (
                 off.course.degree_program.code,
@@ -422,7 +438,11 @@ class Command(BaseCommand):
             offering_index.setdefault((off.course.degree_program.code, off.course.number, off.group_name, ''), []).append(off)
 
         created = 0
-        sheet_names = [n for n in wb.sheetnames if n.upper().startswith('HORARIOS')]
+        target_sheet = EXCEL_SHEET_TITLES.get(semester)
+        if target_sheet and target_sheet in wb.sheetnames:
+            sheet_names = [target_sheet]
+        else:
+            sheet_names = [n for n in wb.sheetnames if n.upper().startswith('HORARIOS')]
         for sheet_name in sheet_names:
             ws = wb[sheet_name]
             rows = list(ws.iter_rows(values_only=True))

@@ -122,12 +122,24 @@ class Command(BaseCommand):
         idx = 0
         for course in courses:
             for subject in subjects[:5]:
-                SubjectOffering.objects.update_or_create(
-                    subject=subject, course=course, group_name='Grupo A',
-                    defaults={'professor': profs[idx % len(profs)], 'classroom': classrooms[idx % len(classrooms)]}
-                )
+                for semester in ('S1', 'S2'):
+                    SubjectOffering.objects.update_or_create(
+                        subject=subject, course=course, group_name='Grupo A', semester=semester,
+                        defaults={'professor': profs[idx % len(profs)], 'classroom': classrooms[idx % len(classrooms)]}
+                    )
                 idx += 1
 
         Student.objects.update_or_create(email='lucia.martin@ucjc.local', defaults={'first_name': 'Lucía', 'last_name': 'Martín', 'course': main_courses[0]})
-        Schedule.objects.get_or_create(name='Horario UCJC V2 - Primer Semestre', academic_year=year, defaults={'status': 'DRAFT'})
+        Schedule.objects.get_or_create(
+            name='Horario UCJC V2 - Primer Semestre',
+            academic_year=year,
+            semester='S1',
+            defaults={'status': 'DRAFT'},
+        )
+        Schedule.objects.get_or_create(
+            name='Horario UCJC V2 - Segundo Semestre',
+            academic_year=year,
+            semester='S2',
+            defaults={'status': 'DRAFT'},
+        )
         self.stdout.write(self.style.SUCCESS('Datos demo creados. Usuarios: decano/profesor/estudiante/it. Contraseña: ucjc1234'))

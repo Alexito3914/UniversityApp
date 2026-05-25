@@ -11,6 +11,12 @@ class BaseModel(models.Model):
         abstract = True
 
 
+SEMESTER_CHOICES = [
+    ('S1', '1º cuatrimestre'),
+    ('S2', '2º cuatrimestre'),
+]
+
+
 class UserProfile(BaseModel):
     ROLE_CHOICES = [
         ('DEAN', 'Decanato'),
@@ -156,19 +162,26 @@ class Subject(BaseModel):
 
 
 class SubjectOffering(BaseModel):
+    SEMESTER_CHOICES = SEMESTER_CHOICES
+
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='offerings')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='subject_offerings')
     professor = models.ForeignKey(Professor, on_delete=models.PROTECT, related_name='subject_offerings')
     classroom = models.ForeignKey(Classroom, on_delete=models.PROTECT, related_name='subject_offerings')
     group_name = models.CharField(max_length=50, default='Grupo A')
+    semester = models.CharField(max_length=2, choices=SEMESTER_CHOICES, default='S1')
+    weekly_sessions = models.PositiveSmallIntegerField(default=2)
 
     class Meta:
-        unique_together = ('subject', 'course', 'group_name')
+        unique_together = ('subject', 'course', 'group_name', 'semester')
         verbose_name = 'Oferta de asignatura'
         verbose_name_plural = 'Ofertas de asignaturas'
 
     def __str__(self):
-        return f"{self.subject.code} - {self.course} - {self.group_name}"
+        return f"{self.subject.code} - {self.course} - {self.group_name} ({self.get_semester_display()})"
+
+    def sessions_per_week(self):
+        return self.weekly_sessions or self.subject.weekly_sessions
 
 
 class ProfessorAvailability(BaseModel):
@@ -197,9 +210,11 @@ class Schedule(BaseModel):
         ('APPROVED', 'Aprobado'),
         ('REJECTED', 'Rechazado'),
     ]
+    SEMESTER_CHOICES = SEMESTER_CHOICES
 
     name = models.CharField(max_length=120)
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='schedules')
+    semester = models.CharField(max_length=2, choices=SEMESTER_CHOICES, default='S1')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='DRAFT')
 
     class Meta:
@@ -207,7 +222,7 @@ class Schedule(BaseModel):
         verbose_name_plural = 'Horarios'
 
     def __str__(self):
-        return f"{self.name} - {self.academic_year.name}"
+        return f"{self.name} - {self.academic_year.name} ({self.get_semester_display()})"
 
 
 class ScheduleEntry(BaseModel):
