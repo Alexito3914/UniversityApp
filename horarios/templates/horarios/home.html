@@ -1,0 +1,137 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Resumen | UcjcHorarios{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="breadcrumb"><span>Decanato</span><span>Resumen</span></div>
+    <h1>Resumen{% if current_year %} · {{ current_year.name }}{% endif %}</h1>
+    <p>Bienvenido, {{ user_display_name }}. Estado global de horarios y titulaciones.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{% url 'horarios:schedule_list' %}">Ver horarios</a>
+    {% if user_role == 'DEAN' or user_role == 'IT' %}
+    <a class="btn btn-primary" href="{% url 'horarios:schedule_create' %}">+ Nuevo horario</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-4" style="margin-bottom:14px;">
+  <div class="kpi">
+    <div class="lbl">Horarios activos</div>
+    <div class="val tabular">{{ total_horarios }}</div>
+    <div class="sub">{{ horarios_draft }} borrador · {{ horarios_review }} revisión</div>
+  </div>
+  <div class="kpi{% if horarios_review %} accent{% endif %}">
+    <div class="lbl">Pendientes aprobar</div>
+    <div class="val tabular">{{ horarios_review }}</div>
+    <div class="sub">En estado revisión</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Titulaciones</div>
+    <div class="val tabular">{{ total_titulaciones }}</div>
+    <div class="sub">Activas en EPS</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">Aprobados</div>
+    <div class="val tabular">{{ horarios_approved }}</div>
+    <div class="sub">Publicados</div>
+  </div>
+</div>
+
+<div class="dash-row">
+  <div class="card">
+    <div class="card-hd">
+      <h2>Último horario</h2>
+      {% if latest_schedule %}
+      <div class="actions"><a class="btn btn-ghost btn-sm" href="{% url 'horarios:schedule_detail' latest_schedule.pk %}">Abrir editor →</a></div>
+      {% endif %}
+    </div>
+    <div class="card-bd">
+      {% if latest_schedule %}
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <div class="fw-600">{{ latest_schedule.name }}</div>
+          <div class="fs-sm muted">{{ latest_schedule.academic_year.name }}</div>
+        </div>
+        <span class="chip chip-status {% if latest_schedule.status == 'APPROVED' %}chip-ok{% elif latest_schedule.status == 'REVIEW' %}chip-warn{% elif latest_schedule.status == 'REJECTED' %}chip-err{% endif %}">
+          {{ latest_schedule.get_status_display }}
+        </span>
+      </div>
+      {% if latest_schedule.status == 'DRAFT' %}{% if user_role == 'DEAN' or user_role == 'IT' %}
+      <a class="btn btn-primary btn-sm" href="{% url 'horarios:schedule_detail' latest_schedule.pk %}">⚡ Auto-generar / editar</a>
+      {% endif %}{% endif %}
+      {% else %}
+      <p class="muted">Aún no hay horarios. {% if user_role == 'DEAN' or user_role == 'IT' %}<a href="{% url 'horarios:schedule_create' %}">Crea el primero</a>.{% endif %}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Acciones rápidas</h2></div>
+    <div class="card-bd">
+      <div class="row" style="flex-wrap:wrap;gap:8px;">
+        <a class="btn" href="{% url 'horarios:schedule_list' %}">📋 Horarios</a>
+        <a class="btn" href="{% url 'horarios:schedule_list' %}?status=REVIEW">✓ Aprobaciones</a>
+        <a class="btn" href="{% url 'horarios:professor_availability' %}">⏰ Disponibilidad</a>
+        {% if user_role == 'DEAN' or user_role == 'IT' %}
+        <a class="btn btn-ghost" href="{% url 'horarios:configuration' %}">⚙ Marco temporal</a>
+        {% endif %}
+      </div>
+      {% if horarios_review %}
+      <div style="margin-top:16px;padding:12px;background:var(--c-warn-soft);border:1px solid #e8c879;border-radius:6px;font-size:13px;">
+        <b class="text-warn">{{ horarios_review }} horario{{ horarios_review|pluralize }} en revisión</b> — pendiente de aprobación decanal.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if report_rows %}
+<div class="card" style="margin-top:14px;">
+  <div class="card-hd"><h2>Cobertura · último horario</h2></div>
+  <div class="card-bd-flat">
+    <table class="table">
+      <thead>
+        <tr><th>Asignatura</th><th>Curso</th><th>Requeridas</th><th>Programadas</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in report_rows %}
+        <tr>
+          <td><b>{{ row.subject_code }}</b> {{ row.subject_name }}</td>
+          <td class="muted fs-sm">{{ row.course }}</td>
+          <td class="tabular">{{ row.required }}</td>
+          <td class="tabular">{{ row.scheduled }}</td>
+          <td>{% if row.ok %}<span class="chip chip-ok">OK</span>{% else %}<span class="chip chip-warn">Pendiente</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="metric-grid" style="margin-top:14px;">
+  <div class="metric">
+    <div class="label">Profesores</div>
+    <div class="num" data-target="{{ total_profesores }}">0</div>
+    <div class="delta">Plantilla registrada</div>
+  </div>
+  <div class="metric">
+    <div class="label">Asignaturas</div>
+    <div class="num" data-target="{{ total_asignaturas }}">0</div>
+    <div class="delta">Catálogo</div>
+  </div>
+  <div class="metric">
+    <div class="label">Cursos</div>
+    <div class="num" data-target="{{ total_cursos }}">0</div>
+    <div class="delta">Por titulación</div>
+  </div>
+  <div class="metric">
+    <div class="label">Notificaciones</div>
+    <div class="num" data-target="{{ unread_notifications }}">0</div>
+    <div class="delta">Sin leer</div>
+  </div>
+</div>
+
+{% endblock %}

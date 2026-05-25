@@ -1,0 +1,23 @@
+{% extends 'horarios/base.html' %}
+{% block title %}{{ action }} horario | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumb"><b>{{ action }} horario</b></div><h1>{{ action }} horario académico</h1></div>
+</div>
+<div class="card-x" style="max-width:560px;">
+  <form method="post" class="body">
+    {% csrf_token %}
+    {% for field in form %}
+    <div style="margin-bottom:14px;">
+      <label class="form-label">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div style="color:#8B0000;font-size:12px;">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button class="btn-brand" type="submit">Guardar</button>
+      <a class="btn-ghost" href="{% url 'horarios:schedule_list' %}" style="text-decoration:none;display:inline-flex;align-items:center;">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

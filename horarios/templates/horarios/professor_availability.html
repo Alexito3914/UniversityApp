@@ -1,0 +1,323 @@
+{% extends 'horarios/base.html' %}
+{% load horarios_extras %}
+{% block title %}Disponibilidad | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Disponibilidad docente</b> · Cuadrícula semanal</div>
+    <h1>Disponibilidad docente</h1>
+  </div>
+</div>
+
+{% if user_role != 'PROF' %}
+<div class="card-x av-prof-picker" style="margin-bottom:16px;">
+  <form method="get" class="body">
+    <label class="form-label">Profesor</label>
+    <select class="form-select" name="professor" onchange="this.form.submit()">
+      <option value="">— Selecciona un profesor —</option>
+      {% for p in professors %}
+        <option value="{{ p.pk }}" {% if selected_professor.pk == p.pk %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+{% endif %}
+
+{% if selected_professor %}
+<form method="post" id="availabilityForm" class="av-shell">
+  {% csrf_token %}
+
+  <div class="av-hero card-x">
+    <div class="body av-hero-inner">
+      <div class="av-avatar" aria-hidden="true">
+        {{ selected_professor.first_name|slice:":1" }}{{ selected_professor.last_name|slice:":1" }}
+      </div>
+      <div class="av-hero-copy">
+        <div class="av-hero-name">{{ selected_professor }}</div>
+        <div class="av-hero-meta">
+          {{ selected_professor.email }}
+          {% if current_year %} · {{ current_year.name }}{% endif %}
+        </div>
+      </div>
+      <div class="av-stats" id="avStats" aria-live="polite"></div>
+    </div>
+  </div>
+
+  {% if not current_year %}
+  <div class="card-x"><div class="body" style="color:var(--c-muted);">
+    No hay un año académico marcado como actual. Configúralo en administración.
+  </div></div>
+  {% elif availability_grid %}
+
+  <div class="card-x av-controls">
+    <div class="body av-controls-inner">
+      <div class="av-quick-actions">
+        <button type="button" class="av-quick-btn" data-action="morning-preferred">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          Mañanas preferente
+        </button>
+        <button type="button" class="av-quick-btn" data-action="afternoon-preferred">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Tardes preferente
+        </button>
+        <button type="button" class="av-quick-btn" data-action="all-preferred">Todo preferente</button>
+        <button type="button" class="av-quick-btn av-quick-btn-muted" data-action="clear-all">Limpiar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="av-workspace">
+    <aside class="av-glossary card-x" aria-label="Índice de siglas">
+      <div class="av-glossary-head">
+        <span class="av-glossary-icon" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <span class="av-glossary-title">Índice</span>
+      </div>
+      <div class="body av-glossary-body">
+        <section class="av-glossary-section">
+          <h3 class="av-glossary-label">Estados</h3>
+          <ul class="av-glossary-list">
+            <li>
+              <span class="av-glossary-chip av-none" aria-hidden="true"><span class="av-glossary-chip-dot"></span></span>
+              <div>
+                <strong>Sin definir</strong>
+                <span>Aún no has indicado preferencia en esa franja.</span>
+              </div>
+            </li>
+            <li>
+              <span class="av-glossary-chip av-prefer" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Pref.
+              </span>
+              <div>
+                <strong>Pref.</strong>
+                <span>Disponibilidad preferente: te gustaría impartir clase aquí.</span>
+              </div>
+            </li>
+            <li>
+              <span class="av-glossary-chip av-block" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                No disp.
+              </span>
+              <div>
+                <strong>No disp.</strong>
+                <span>No estás disponible en ese horario.</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+        <section class="av-glossary-section">
+          <h3 class="av-glossary-label">Turnos</h3>
+          <ul class="av-glossary-list av-glossary-compact">
+            <li>
+              <code>09–15 h</code>
+              <span>Mañana · 1º a 3º curso</span>
+            </li>
+            <li>
+              <code>15:30–21:30</code>
+              <span>Tarde · 4º curso</span>
+            </li>
+          </ul>
+        </section>
+        <section class="av-glossary-section">
+          <h3 class="av-glossary-label">Cómo usar</h3>
+          <p class="av-glossary-tip">
+            <b>Clic</b> cambia el estado en ciclo:
+            <span class="av-cycle">· → Pref. → No disp.</span>
+          </p>
+          <p class="av-glossary-tip">Mantén pulsado y <b>arrastra</b> para marcar varias franjas seguidas.</p>
+        </section>
+      </div>
+    </aside>
+
+    <div class="card-x av-grid-card">
+    <div class="grid-wrap av-grid-wrap">
+      <table class="avail-grid">
+        <colgroup>
+          <col class="col-time">
+          <col class="col-day" span="5">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            {% for day in availability_grid.day_order %}
+              <th><span class="av-day">{{ availability_grid.day_labels|get_item:day }}</span></th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for section in availability_grid.sections %}
+            {% if section.rows %}
+              {% if section.shift == 'afternoon' %}
+              <tr class="av-shift-divider">
+                <td colspan="6"><span class="av-shift-tag">Turno de tarde · 4º curso</span></td>
+              </tr>
+              {% endif %}
+              {% for row in section.rows %}
+              <tr data-shift="{{ section.shift }}">
+                <th scope="row" class="av-time-cell">
+                  <span class="av-time-stack">
+                    <span class="av-time">{{ row.time_pair.0|time:"H:i" }}</span>
+                    <span class="av-time-divider">–</span>
+                    <span class="av-time">{{ row.time_pair.1|time:"H:i" }}</span>
+                  </span>
+                </th>
+                {% for cell in row.cells %}
+                <td class="av-cell">
+                  {% if cell %}
+                  <button type="button" class="av-chip av-none" aria-label="Sin definir — clic para cambiar">
+                    <span class="av-chip-icon" aria-hidden="true"></span>
+                    <span class="av-chip-text"></span>
+                  </button>
+                  {{ cell.field }}
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    </div>
+  </div>
+
+  <div class="av-save-bar">
+    <span class="av-save-hint">Los cambios no se aplican hasta guardar.</span>
+    <button type="submit" class="btn-brand">Guardar disponibilidad</button>
+  </div>
+  {% endif %}
+</form>
+{% elif user_role != 'PROF' %}
+<div class="card-x"><div class="body" style="color:var(--c-muted);">
+  Selecciona un profesor para ver o editar su disponibilidad.
+</div></div>
+{% else %}
+<div class="card-x"><div class="body">
+  Tu usuario no está vinculado a ningún perfil de profesor. Contacta con administración.
+</div></div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const STATES = ['', 'PREFERRED', 'BLOCKED'];
+  const STATE_META = {
+    '': {
+      cls: 'av-none',
+      title: 'Sin definir',
+      short: '',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    },
+    PREFERRED: {
+      cls: 'av-prefer',
+      title: 'Disponibilidad preferente',
+      short: 'Pref.',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    },
+    BLOCKED: {
+      cls: 'av-block',
+      title: 'No disponible',
+      short: 'No disp.',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    },
+  };
+
+  let painting = false;
+  let paintState = null;
+
+  function applyCell(cell, state) {
+    const meta = STATE_META[state] || STATE_META[''];
+    const chip = cell.querySelector('.av-chip');
+    if (!chip) return;
+    cell.dataset.state = state;
+    chip.dataset.state = state;
+    chip.classList.remove('av-none', 'av-prefer', 'av-block');
+    chip.classList.add(meta.cls);
+    chip.setAttribute('aria-label', meta.title + ' — clic para cambiar');
+    const icon = chip.querySelector('.av-chip-icon');
+    const text = chip.querySelector('.av-chip-text');
+    if (icon) icon.innerHTML = meta.icon;
+    if (text) text.textContent = meta.short;
+    const input = cell.querySelector('.av-state-input');
+    if (input) input.value = state;
+  }
+
+  function cycleCell(cell) {
+    const cur = cell.dataset.state || '';
+    const idx = STATES.indexOf(cur);
+    applyCell(cell, STATES[(idx + 1) % STATES.length]);
+  }
+
+  function setCells(cells, state) {
+    cells.forEach(function (cell) { applyCell(cell, state); });
+    updateStats();
+  }
+
+  function updateStats() {
+    const stats = document.getElementById('avStats');
+    if (!stats) return;
+    let preferred = 0, blocked = 0, none = 0;
+    document.querySelectorAll('.av-cell[data-state]').forEach(function (cell) {
+      const s = cell.dataset.state || '';
+      if (s === 'PREFERRED') preferred++;
+      else if (s === 'BLOCKED') blocked++;
+      else none++;
+    });
+    stats.innerHTML =
+      '<span class="av-stat av-stat-prefer"><b>' + preferred + '</b> preferente</span>' +
+      '<span class="av-stat av-stat-block"><b>' + blocked + '</b> no disp.</span>' +
+      '<span class="av-stat av-stat-none"><b>' + none + '</b> sin definir</span>';
+  }
+
+  document.querySelectorAll('.av-cell').forEach(function (cell) {
+    const chip = cell.querySelector('.av-chip');
+    if (!chip) return;
+    applyCell(cell, cell.querySelector('.av-state-input')?.value || '');
+
+    chip.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      if (!painting) {
+        cycleCell(cell);
+        paintState = cell.dataset.state;
+        painting = true;
+        document.body.classList.add('av-painting');
+        updateStats();
+      }
+    });
+    chip.addEventListener('mouseenter', function () {
+      if (painting && paintState !== null) {
+        applyCell(cell, paintState);
+        updateStats();
+      }
+    });
+  });
+
+  document.addEventListener('mouseup', function () {
+    painting = false;
+    paintState = null;
+    document.body.classList.remove('av-painting');
+  });
+
+  document.querySelectorAll('.av-quick-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const action = btn.dataset.action;
+      const all = Array.from(document.querySelectorAll('.av-cell')).filter(function (c) {
+        return c.querySelector('.av-state-input');
+      });
+      if (action === 'all-preferred') setCells(all, 'PREFERRED');
+      else if (action === 'morning-preferred') {
+        setCells(Array.from(document.querySelectorAll('tr[data-shift="morning"] .av-cell')), 'PREFERRED');
+      } else if (action === 'afternoon-preferred') {
+        setCells(Array.from(document.querySelectorAll('tr[data-shift="afternoon"] .av-cell')), 'PREFERRED');
+      } else if (action === 'clear-all') setCells(all, '');
+    });
+  });
+
+  updateStats();
+})();
+</script>
+{% endblock %}

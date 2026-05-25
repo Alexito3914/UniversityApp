@@ -1,0 +1,22 @@
+<div class="theme-toggle-wrap{% if login %} theme-toggle-login{% endif %}">
+  <button type="button" class="theme-pick theme-pick-sun" data-set-theme="light" title="Modo claro" aria-label="Modo claro" onclick="window.UhTheme && UhTheme.apply('light'); return false;">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.5" fill="#FBBF24" stroke="#000" stroke-width="2"/>
+      <g stroke="#000" stroke-width="2" stroke-linecap="round">
+        <line x1="12" y1="2" x2="12" y2="5"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="5" y2="12"/>
+        <line x1="19" y1="12" x2="22" y2="12"/>
+        <line x1="4.5" y1="4.5" x2="6.8" y2="6.8"/>
+        <line x1="17.2" y1="17.2" x2="19.5" y2="19.5"/>
+        <line x1="4.5" y1="19.5" x2="6.8" y2="17.2"/>
+        <line x1="17.2" y1="6.8" x2="19.5" y2="4.5"/>
+      </g>
+    </svg>
+  </button>
+  <button type="button" class="theme-pick theme-pick-moon" data-set-theme="dark" title="Modo oscuro" aria-label="Modo oscuro" onclick="window.UhTheme && UhTheme.apply('dark'); return false;">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3a9 9 0 0 0 0 18c4.5 0 8.2-3.3 8.9-7.6A7.5 7.5 0 0 1 12 3z" fill="#94A3B8" stroke="#000" stroke-width="2" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</div>

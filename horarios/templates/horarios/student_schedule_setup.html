@@ -1,0 +1,82 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Mi horario · Configurar | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Alumno</b> · Selección de titulación</div>
+    <h1>Configura tu horario</h1>
+    <p class="muted" style="margin-top:8px;max-width:560px;line-height:1.5;">
+      Indica a qué titulación y curso perteneces para ver únicamente las clases de tu grupo.
+    </p>
+  </div>
+</div>
+
+<div class="card-x" style="max-width:520px;">
+  <div class="body">
+    {% if selected %}
+    <div class="flash ok" style="margin-bottom:18px;">
+      Actualmente: <b>{{ selected.degree_program.code }} · {{ selected.degree_program.name }}</b>
+      · {{ selected.number }}º · {{ selected.academic_year.name }}
+      {% if selected_group %}
+        · Grupo: <b>{{ selected_group }}</b>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="col gap-12">
+      {% csrf_token %}
+      <div>
+        <label class="label">Año académico</label>
+        <select class="input" name="academic_year" required>
+          <option value="">Selecciona año académico</option>
+          {% for y in academic_years %}
+            <option value="{{ y.pk }}"
+              {% if selected and selected.academic_year_id == y.pk %}selected
+              {% elif not selected and current_year and current_year.pk == y.pk %}selected{% endif %}>
+              {{ y.name }}{% if y.is_current %} (actual){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">Titulación</label>
+        <select class="input" name="degree" required>
+          <option value="">Selecciona titulación</option>
+          {% for d in degrees %}
+            <option value="{{ d.pk }}" {% if selected and selected.degree_program_id == d.pk %}selected{% endif %}>
+              {{ d.code }} · {{ d.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">Curso (año de estudios)</label>
+        <select class="input" name="course_number" required>
+          <option value="">Selecciona curso</option>
+          {% for n in course_numbers %}
+            <option value="{{ n }}" {% if selected and selected.number == n %}selected{% endif %}>{{ n }}º</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if form_group_choices|length > 1 %}
+      <div>
+        <label class="label">Especialidad / grupo</label>
+        <select class="input" name="group_name" required>
+          <option value="">Selecciona tu grupo</option>
+          {% for g in form_group_choices %}
+            <option value="{{ g }}" {% if selected_group == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+        <p class="muted" style="margin-top:6px;font-size:12px;">Necesario en 4º curso u otras titulaciones con varios grupos.</p>
+      </div>
+      {% endif %}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+        <button type="submit" class="btn btn-primary">Ver mi horario →</button>
+        {% if selected %}
+        <a class="btn btn-ghost" href="{% url 'horarios:student_my_schedule' %}" style="text-decoration:none;">Continuar sin cambiar</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

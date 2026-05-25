@@ -1,0 +1,48 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Informes | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Informes</b> · Cobertura por horario</div>
+    <h1>Informe de generación</h1>
+  </div>
+</div>
+
+<form method="get" class="card-x" style="margin-bottom:14px;">
+  <div class="body" style="display:flex;gap:14px;align-items:end;">
+    <div style="flex:1;max-width:400px;">
+      <label class="form-label">Horario</label>
+      <select class="form-select" name="schedule" onchange="this.form.submit()">
+        {% for s in schedules %}
+        <option value="{{ s.pk }}" {% if schedule.pk == s.pk %}selected{% endif %}>{{ s.name }} · {{ s.academic_year.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:14px;">
+      <span class="stat" style="background:#e6f7f0;color:#0a7a5b;"><b>{{ ok_count }}</b> OK</span>
+      <span class="stat" style="background:#fdecef;color:#8B0000;"><b>{{ pending_count }}</b> Pendientes</span>
+    </div>
+  </div>
+</form>
+
+<div class="card-x">
+  <table class="tbl">
+    <thead><tr><th>Asignatura</th><th>Curso</th><th>Profesor</th><th>Sesiones</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><b>{{ r.subject_code }}</b> {{ r.subject_name }}{% if r.shared %} <span class="badge-trans" style="position:static;display:inline-block;">Transversal</span>{% endif %}</td>
+        <td>{{ r.course }}</td>
+        <td>{{ r.teacher }}</td>
+        <td>{{ r.scheduled }} / {{ r.required }}</td>
+        <td>
+          {% if r.ok %}<span class="pill approved">OK</span>{% else %}<span class="pill review">Pendiente</span>{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--ink-soft);">Sin datos.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

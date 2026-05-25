@@ -1,0 +1,40 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Notificaciones | UCJC{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Notificaciones</b> · Centro de avisos</div>
+    <h1>Notificaciones</h1>
+  </div>
+  {% if notifications %}
+  <form method="post" action="{% url 'horarios:notification_mark_all' %}" style="margin:0;">
+    {% csrf_token %}
+    <button type="submit" class="btn-brand">Marcar todas como leídas</button>
+  </form>
+  {% endif %}
+</div>
+
+<div>
+  {% for n in notifications %}
+  <div class="notif {% if not n.is_read %}unread{% endif %}">
+    <div class="ic-circle {% if n.notif_type == 'ok' %}ok{% elif n.notif_type == 'warn' %}warn{% elif n.notif_type == 'err' %}err{% else %}info{% endif %}" style="width:36px;height:36px;font-size:14px;font-weight:700;">
+      {% if n.notif_type == 'ok' %}✓{% elif n.notif_type == 'warn' %}!{% elif n.notif_type == 'err' %}✕{% else %}i{% endif %}
+    </div>
+    <div class="body">
+      <b>{{ n.message }}</b>
+      <small>hace {{ n.created_at|timesince }}</small>
+    </div>
+    <span class="pill {% if n.is_read %}read{% else %}unread{% endif %}">{% if n.is_read %}Leída{% else %}No leída{% endif %}</span>
+    <a href="{% url 'horarios:notification_toggle' n.pk %}" class="btn-quiet" style="text-decoration:none;">
+      {% if n.is_read %}Marcar no leída{% else %}Marcar leída{% endif %}
+    </a>
+  </div>
+  {% empty %}
+  <div class="card-x"><div class="body" style="color:var(--ink-soft);text-align:center;padding:40px;">
+    📭 No tienes notificaciones todavía.
+  </div></div>
+  {% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,149 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}UcjcHorarios{% endblock %}</title>
+<link href="{% static 'css/horarios-ui.css' %}" rel="stylesheet">
+<link href="{% static 'css/horarios-django.css' %}" rel="stylesheet">
+<script>(function(){try{var t=localStorage.getItem('uh_theme');if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');document.documentElement.classList.add('theme-dark');}}catch(e){}})();</script>
+<script>
+window.UhTheme = {
+  apply: function(theme) {
+    var root = document.documentElement;
+    theme = theme === 'dark' ? 'dark' : 'light';
+    if (theme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+      root.classList.add('theme-dark');
+    } else {
+      root.removeAttribute('data-theme');
+      root.classList.remove('theme-dark');
+    }
+    try { localStorage.setItem('uh_theme', theme); } catch (e) {}
+    document.querySelectorAll('.theme-pick[data-set-theme]').forEach(function(btn) {
+      var on = btn.getAttribute('data-set-theme') === theme;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-tweak="theme"] button').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-value') === theme);
+    });
+  },
+  init: function() {
+    var theme = 'light';
+    try { theme = localStorage.getItem('uh_theme') || 'light'; } catch (e) {}
+    this.apply(theme);
+  }
+};
+document.addEventListener('DOMContentLoaded', function() { UhTheme.init(); });
+</script>
+{% block extra_head %}{% endblock %}
+</head>
+<body{% if not user.is_authenticated %} class="login-page"{% endif %} data-palette="granate" data-font="inter" data-density="regular">
+
+{% if user.is_authenticated %}
+<div class="app">
+  <header class="topbar">
+    <a class="logo" href="{% url 'horarios:home' %}" style="text-decoration:none;color:inherit;">
+      <div class="logo-mark">UH</div>
+      <div class="logo-text">Ucjc<b>Horarios</b></div>
+    </a>
+    {% if current_year %}
+    <span class="chip chip-info chip-dot">{{ current_year.name }}</span>
+    {% endif %}
+    <input type="search" class="topbar-search" placeholder="Buscar horarios, titulaciones…" aria-label="Buscar" id="globalSearch" />
+    <span class="spacer"></span>
+    {% include 'horarios/includes/theme_toggle.html' %}
+    <div class="bell-wrap">
+      <button class="btn btn-icon btn-ghost" id="bellBtn" type="button" title="Notificaciones" aria-label="Notificaciones">
+        {% include 'horarios/includes/icon.html' with name='bell' %}
+        {% if unread_notifications %}<span class="bell-count" id="bellCount">{{ unread_notifications }}</span>{% endif %}
+      </button>
+      <div class="bell-dropdown" id="bellMenu">
+        <header>
+          <span>Notificaciones</span>
+          <a href="#" onclick="markAllRead();return false;">Marcar leídas</a>
+        </header>
+        <ul id="bellList"></ul>
+        <footer><a href="{% url 'horarios:notifications' %}">Ver todas →</a></footer>
+      </div>
+    </div>
+    <div class="userpill">
+      <span class="avatar">{{ user_initials }}</span>
+      <span>
+        <span class="name">{{ user_display_name }}</span><br>
+        <span class="role">{{ role_label }}</span>
+      </span>
+      <form method="post" action="{% url 'logout' %}" class="m-0" style="margin-left:4px;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-icon btn-ghost" title="Cerrar sesión" aria-label="Cerrar sesión">↗</button>
+      </form>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    {% include 'horarios/includes/sidebar_nav.html' %}
+    <div class="sidebar-footer">
+      <b>Año académico activo</b>
+      {% if current_year %}{{ current_year.name }}{% else %}Sin definir{% endif %}
+      <div style="margin-top:6px;opacity:.85;">{{ user.username }} · {{ role_label }}</div>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="main-inner">
+      {% if messages %}
+      <div class="flash-messages">
+        {% for message in messages %}
+        <div class="flash {% if message.tags == 'error' %}error{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<button type="button" class="tweaks-toggle" id="tweaksToggle" title="Apariencia">◎</button>
+<div class="tweaks-panel" id="tweaksPanel" aria-label="Personalización">
+  <h4>Tema</h4>
+  <div class="seg" data-tweak="theme">
+    <button type="button" data-value="light" class="active">Claro</button>
+    <button type="button" data-value="dark">Oscuro</button>
+  </div>
+  <h4>Paleta</h4>
+  <div class="tweak-swatches" data-tweak="palette">
+    <button type="button" class="tweak-swatch active" data-value="granate" style="background:#7d2030" title="Granate UCJC"></button>
+    <button type="button" class="tweak-swatch" data-value="azul" style="background:#1e40af" title="Azul"></button>
+    <button type="button" class="tweak-swatch" data-value="verde" style="background:#166534" title="Verde"></button>
+    <button type="button" class="tweak-swatch" data-value="grafito" style="background:#1a212a" title="Grafito"></button>
+  </div>
+  <h4>Tipografía</h4>
+  <div class="seg" data-tweak="font">
+    <button type="button" data-value="inter" class="active">Inter</button>
+    <button type="button" data-value="ibm">IBM</button>
+    <button type="button" data-value="serif">Serif</button>
+  </div>
+  <h4>Densidad</h4>
+  <div class="seg" data-tweak="density">
+    <button type="button" data-value="compact">Compacto</button>
+    <button type="button" data-value="regular" class="active">Normal</button>
+    <button type="button" data-value="comfy">Amplio</button>
+  </div>
+</div>
+
+<script id="notif-data" type="application/json">{{ notifications_json|default:"[]"|safe }}</script>
+<script src="{% static 'js/horarios-ui.js' %}?v=3"></script>
+{% block extra_js %}{% endblock %}
+
+{% else %}
+{% include 'horarios/includes/theme_toggle.html' with login=1 %}
+{% block auth_content %}{% endblock %}
+<script src="{% static 'js/horarios-ui.js' %}?v=3"></script>
+{% block extra_js_unauth %}{% endblock %}
+{% endif %}
+
+</body>
+</html>

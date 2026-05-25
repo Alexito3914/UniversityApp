@@ -1,0 +1,59 @@
+{% extends 'horarios/base.html' %}
+{% block title %}{{ action }} | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumb"><a href="{% url 'horarios:schedule_detail' schedule.pk %}" style="color:var(--ink-soft);text-decoration:none;">{{ schedule.name }}</a> · <b>{{ action }}</b></div><h1>{{ action }}</h1></div>
+</div>
+<div class="card-x" style="max-width:560px;">
+  <form method="post" class="body">
+    {% csrf_token %}
+    {% for field in form %}
+    <div style="margin-bottom:14px;">
+      <label class="form-label">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div style="color:#8B0000;font-size:12px;">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    {% if conflict_errors %}
+    <div style="background:#fdecef;border:1px solid #f5c2c9;color:#8B0000;padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px;">
+      <b>Conflictos detectados:</b> {{ conflict_errors|join:" / " }}
+    </div>
+    {% endif %}
+    {% if suggested_slots %}
+    <div style="background:#eef6ff;border:1px solid #c7dcff;color:#1f3f75;padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:14px;">
+      <b>Sugerencias de franjas libres:</b>
+      {% for s in suggested_slots %}
+        <span style="display:inline-block;margin:4px 6px 0 0;background:#fff;border:1px solid #bfd7ff;border-radius:999px;padding:2px 8px;">{{ s }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if form.non_field_errors %}
+    <div style="background:#fdecef;border:1px solid #f5c2c9;color:#8B0000;padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:14px;">
+      ⚠ {{ form.non_field_errors|join:" / " }}
+    </div>
+    {% endif %}
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button class="btn-brand" type="submit">Guardar sesión</button>
+      <a class="btn-ghost" href="{% url 'horarios:schedule_detail' schedule.pk %}" style="text-decoration:none;display:inline-flex;align-items:center;">Cancelar</a>
+    </div>
+  </form>
+</div>
+<script>
+(function bindRealtimeConflictCheck(){
+  const form = document.querySelector('form[method="post"]');
+  if (!form) return;
+  const selects = form.querySelectorAll('select[name="subject_offering"], select[name="timeslot"]');
+  selects.forEach(sel => {
+    sel.addEventListener('change', function(){
+      const offering = form.querySelector('select[name="subject_offering"]')?.value;
+      const timeslot = form.querySelector('select[name="timeslot"]')?.value;
+      if (!offering || !timeslot) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('subject_offering', offering);
+      url.searchParams.set('timeslot', timeslot);
+      window.location.href = url.toString();
+    });
+  });
+})();
+</script>
+{% endblock %}

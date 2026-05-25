@@ -1,0 +1,734 @@
+{% extends 'horarios/base.html' %}
+{% load horarios_extras %}
+{% block title %}{{ schedule.name }} | UCJC{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="breadcrumb">
+      {% if is_student_view %}
+      <span><a href="{% url 'horarios:student_my_schedule' %}" style="color:inherit;text-decoration:none;">Mi horario</a></span>
+      {% elif is_professor_view %}
+      <span><a href="{% url 'horarios:professor_my_schedule' %}" style="color:inherit;text-decoration:none;">Mi horario</a></span>
+      {% else %}
+      <span><a href="{% url 'horarios:schedule_list' %}" style="color:inherit;text-decoration:none;">Horarios</a></span>
+      {% endif %}
+      <span>{{ schedule.name }}</span>
+    </div>
+    {% if is_student_view %}
+    <h1>Mi horario · {{ schedule.academic_year.name }}</h1>
+    <p>
+      {% if student_course %}
+        <b>{{ student_course.degree_program.code }} · {{ student_course.degree_program.name }}</b>
+        · {{ student_course.number }}º {{ student_course.get_shift_display }}
+      {% endif %}
+      {% if schedule.status == 'APPROVED' %}
+        · <span class="chip chip-status chip-ok">Publicado</span>
+      {% else %}
+        · <span class="chip chip-status chip-warn">Borrador (vista previa)</span>
+      {% endif %}
+    </p>
+    {% elif is_professor_view %}
+    <h1>Mi horario · {{ schedule.academic_year.name }}</h1>
+    <p>
+      {% if linked_professor %}
+        <b>{{ linked_professor }}</b> · solo tus clases asignadas
+      {% endif %}
+      · <span class="chip chip-status chip-ok">Publicado</span>
+    </p>
+    {% else %}
+    <h1>Editor horario · {{ schedule.academic_year.name }}
+      <span class="chip chip-status {% if schedule.status == 'APPROVED' %}chip-ok{% elif schedule.status == 'REVIEW' %}chip-warn{% elif schedule.status == 'REJECTED' %}chip-err{% endif %}" style="margin-left:8px;vertical-align:middle;">
+        {{ schedule.get_status_display }}
+      </span>
+    </h1>
+    <p>
+      Construyendo: <b>{{ schedule.name }}</b>
+      {% if selected_degree_obj %}
+        · Titulación activa: <b>{{ selected_degree_obj.code }} - {{ selected_degree_obj.name }}</b>
+      {% else %}
+        · Titulación activa: <b>Todas</b>
+      {% endif %}
+      {% if selected_course_obj %}
+        · Curso activo: <b>{{ selected_course_obj.number }}º {{ selected_course_obj.get_shift_display }}</b>
+      {% else %}
+        Curso activo: <b>Todos</b>
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+  <div class="actions">
+    {% if is_student_view %}
+    <a class="btn-ghost" href="{% url 'horarios:student_schedule_setup' %}" style="text-decoration:none;">Cambiar titulación</a>
+    {% elif is_professor_view %}
+    <a class="btn-ghost" href="{% url 'horarios:professor_availability' %}" style="text-decoration:none;">Disponibilidad</a>
+    {% else %}
+    <a class="btn-ghost" href="{% url 'horarios:schedule_export_csv' schedule.pk %}" style="text-decoration:none;">📊 CSV</a>
+    {% if can_manage and schedule.status == 'DRAFT' %}
+      <a class="btn-brand" href="{% url 'horarios:schedule_entry_create' schedule.pk %}" style="text-decoration:none;display:inline-flex;align-items:center;">+ Añadir sesión</a>
+      <form method="post" action="{% url 'horarios:schedule_generate' schedule.pk %}" style="margin:0;" id="genForm">
+        {% csrf_token %}
+        <input type="hidden" name="clear_existing" value="on" id="clearExisting">
+        <input type="hidden" name="free_day" value="" id="freeDayInput">
+        <input type="hidden" name="degree" value="" id="degreeInput">
+        <input type="hidden" name="course" value="" id="courseInput">
+        <input type="hidden" name="course_number" value="" id="courseNumberInput">
+        <input type="hidden" name="academic_year" value="{{ schedule.academic_year_id }}" id="academicYearInput">
+        <button class="btn-ghost" type="button" onclick="openGenModal()">⚡ Auto-generar</button>
+        <button class="btn-ghost" type="button" onclick="quickGenAllCourse(1)" title="Generar 1º de todas las titulaciones">1º todas</button>
+        <button class="btn-ghost" type="button" onclick="quickGenAllCourse(4)" title="Generar 4º de todas las titulaciones">4º todas</button>
+      </form>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if can_manage and schedule.status == 'DRAFT' %}
+<!-- Modal auto-generar -->
+<div id="genModal">
+  <div class="modal-panel">
+    <h5 style="font-weight:800;margin-bottom:6px;">⚡ Auto-generar horario</h5>
+    <p style="color:var(--ink-soft);font-size:13px;margin-bottom:18px;">El motor asignará las sesiones respetando disponibilidad, máximo 20h semanales por curso, y franjas de mañana (tarde solo para 4º curso).</p>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Año académico</label>
+      <select id="yearSelect" class="form-select">
+        <option value="">Selecciona año académico</option>
+        {% for y in academic_years %}
+          <option value="{{ y.pk }}">{{ y.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Año de estudios — todas las titulaciones</label>
+      <select id="courseNumberSelect" class="form-select">
+        <option value="">Todos los cursos (1º–4º)</option>
+        <option value="1">1º curso · todas las titulaciones</option>
+        <option value="2">2º curso · todas las titulaciones</option>
+        <option value="3">3º curso · todas las titulaciones</option>
+        <option value="4">4º curso · todas las titulaciones</option>
+      </select>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.4;">
+        Genera a la vez Informática, Robótica, Telemática, etc. del mismo año de estudios.
+      </p>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Titulación concreta (opcional)</label>
+      <select id="degreeSelect" class="form-select">
+        <option value="">Todas las titulaciones</option>
+        {% for d in degrees %}
+          <option value="{{ d.pk }}" {% if selected_degree == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} · {{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Curso concreto (opcional)</label>
+      <select id="courseSelect" class="form-select">
+        <option value="">— Usar selector de arriba —</option>
+        {% for c in courses %}
+          <option value="{{ c.pk }}" data-degree="{{ c.degree_program_id }}" data-number="{{ c.number }}" {% if selected_course == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.degree_program.code }} · {{ c.number }}º {{ c.get_shift_display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">¿Dejar un día libre por titulación?</label>
+      <select id="freeDaySelect" class="form-select">
+        <option value="">Sin día libre</option>
+        <option value="MON">Lunes libre</option>
+        <option value="TUE">Martes libre</option>
+        <option value="WED">Miércoles libre</option>
+        <option value="THU">Jueves libre</option>
+        <option value="FRI">Viernes libre</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="btn-brand" onclick="confirmGen()">Generar</button>
+      <button class="btn-ghost" onclick="closeGenModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="get" class="grid-toolbar">
+  {% if not is_student_view %}
+  <span class="filter-chip">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+    Titulación:
+    <select name="degree" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for d in degrees %}
+        <option value="{{ d.pk }}" {% if selected_degree == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }}</option>
+      {% endfor %}
+    </select>
+  </span>
+  <span class="filter-chip">
+    Curso:
+    <select name="course" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for c in courses %}
+        <option value="{{ c.pk }}" {% if selected_course == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.degree_program.code }} · {{ c.number }}º {{ c.get_shift_display }}</option>
+      {% endfor %}
+    </select>
+  </span>
+  {% endif %}
+  <div class="seg density-seg" id="densitySeg" aria-label="Densidad de vista">
+    <button type="button" data-density="normal" class="active">Normal</button>
+    <button type="button" data-density="compact">Compacto</button>
+    <button type="button" data-density="ultra">Ultra</button>
+  </div>
+  <div class="seg" id="metaSeg" aria-label="Meta de tarjetas">
+    <button type="button" data-meta="show" class="active">Meta visible</button>
+    <button type="button" data-meta="hide">Ocultar meta</button>
+  </div>
+  <div class="legend" style="margin-left:0;">
+    <span><i style="background:#3B82F6"></i>Informática</span>
+    <span><i style="background:#10B981"></i>Robótica</span>
+    <span><i style="background:#F59E0B"></i>Telemática</span>
+    <span><i style="background:#8B5CF6"></i>Doble Grado</span>
+  </div>
+</form>
+
+{% if morning_times %}
+<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);margin:12px 0 6px;">🌤 Turno de mañana</div>
+<div class="grid-wrap" style="margin-bottom:16px;">
+  <table class="sched">
+    <colgroup>
+      <col class="col-time">
+      <col class="col-day" span="5">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Franja</th>
+        {% for day in day_order %}<th>{{ day_labels|get_item:day }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for time_pair in morning_times %}
+      <tr>
+        <th scope="row">{{ time_pair.0|time:"H:i" }}–{{ time_pair.1|time:"H:i" }}</th>
+        {% for day in day_order %}
+          {% with entries=timetable|get_item:time_pair|get_item:day %}
+          <td class="drop-slot" data-day="{{ day }}" data-start="{{ time_pair.0|time:'H:i' }}" data-end="{{ time_pair.1|time:'H:i' }}">
+            {% for entry in entries %}
+              {% with code=entry.subject_offering.course.degree_program.code %}
+              <div class="class-card {% if 'INF' in code and 'ROB' in code %}card-dg{% elif 'INF' in code or code == 'GII' %}card-info{% elif 'ROB' in code %}card-rob{% elif 'TEL' in code %}card-tel{% else %}card-info{% endif %}{% if can_manage and schedule.status == 'DRAFT' %} class-card-draggable{% endif %}" data-entry-id="{{ entry.pk }}" data-move-url="{% url 'horarios:schedule_entry_move' schedule.pk entry.pk %}">
+                {% if can_manage and schedule.status == 'DRAFT' %}<span class="drag-hint" aria-hidden="true">⋮⋮</span>{% endif %}
+                {% if entry.subject_offering.subject.is_shared %}<span class="badge-trans">Trans.</span>{% endif %}
+                <span class="code">{{ entry.subject_offering.subject.code }}</span>
+                <div class="name">{{ entry.subject_offering.subject.name }}</div>
+                <div class="meta-row">
+                  <span>👤 {{ entry.subject_offering.professor|prof_short_name }}</span>
+                  <span>{{ entry.subject_offering|offering_degree_course }}</span>
+                </div>
+                {% if can_manage and schedule.status == 'DRAFT' %}
+                <form method="post" action="{% url 'horarios:schedule_entry_delete' schedule.pk entry.pk %}" style="margin:0;" onsubmit="return confirm('¿Eliminar?');">
+                  {% csrf_token %}
+                  <button class="trash" type="submit" draggable="false">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              {% endwith %}
+            {% empty %}
+              {% if can_manage and schedule.status == 'DRAFT' %}
+                <a href="{% url 'horarios:schedule_entry_create' schedule.pk %}" class="slot-empty" style="text-decoration:none;color:inherit;">
+                  <span class="plus">+</span><span class="add-label">Añadir</span>
+                </a>
+              {% else %}
+                <div class="slot-empty" style="cursor:default;"><span class="plus" style="font-size:16px;">—</span></div>
+              {% endif %}
+            {% endfor %}
+          </td>
+          {% endwith %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if afternoon_times %}
+<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);margin:12px 0 6px;">🌙 Turno de tarde (4º curso)</div>
+<div class="grid-wrap">
+  <table class="sched">
+    <colgroup>
+      <col class="col-time">
+      <col class="col-day" span="5">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Franja</th>
+        {% for day in day_order %}<th>{{ day_labels|get_item:day }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for time_pair in afternoon_times %}
+      <tr>
+        <th scope="row">{{ time_pair.0|time:"H:i" }}–{{ time_pair.1|time:"H:i" }}</th>
+        {% for day in day_order %}
+          {% with entries=timetable|get_item:time_pair|get_item:day %}
+          <td class="drop-slot" data-day="{{ day }}" data-start="{{ time_pair.0|time:'H:i' }}" data-end="{{ time_pair.1|time:'H:i' }}">
+            {% for entry in entries %}
+              {% with code=entry.subject_offering.course.degree_program.code %}
+              <div class="class-card {% if 'INF' in code and 'ROB' in code %}card-dg{% elif 'INF' in code or code == 'GII' %}card-info{% elif 'ROB' in code %}card-rob{% elif 'TEL' in code %}card-tel{% else %}card-info{% endif %}{% if can_manage and schedule.status == 'DRAFT' %} class-card-draggable{% endif %}" data-entry-id="{{ entry.pk }}" data-move-url="{% url 'horarios:schedule_entry_move' schedule.pk entry.pk %}">
+                {% if can_manage and schedule.status == 'DRAFT' %}<span class="drag-hint" aria-hidden="true">⋮⋮</span>{% endif %}
+                {% if entry.subject_offering.subject.is_shared %}<span class="badge-trans">Trans.</span>{% endif %}
+                <span class="code">{{ entry.subject_offering.subject.code }}</span>
+                <div class="name">{{ entry.subject_offering.subject.name }}</div>
+                <div class="meta-row">
+                  <span>👤 {{ entry.subject_offering.professor|prof_short_name }}</span>
+                  <span>{{ entry.subject_offering|offering_degree_course }}</span>
+                </div>
+                {% if can_manage and schedule.status == 'DRAFT' %}
+                <form method="post" action="{% url 'horarios:schedule_entry_delete' schedule.pk entry.pk %}" style="margin:0;" onsubmit="return confirm('¿Eliminar?');">
+                  {% csrf_token %}
+                  <button class="trash" type="submit" draggable="false">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              {% endwith %}
+            {% empty %}
+              {% if can_manage and schedule.status == 'DRAFT' %}
+                <a href="{% url 'horarios:schedule_entry_create' schedule.pk %}" class="slot-empty" style="text-decoration:none;color:inherit;">
+                  <span class="plus">+</span><span class="add-label">Añadir</span>
+                </a>
+              {% else %}
+                <div class="slot-empty" style="cursor:default;"><span class="plus" style="font-size:16px;">—</span></div>
+              {% endif %}
+            {% endfor %}
+          </td>
+          {% endwith %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if not morning_times and not afternoon_times %}
+<div class="card-x"><div class="body" style="text-align:center;color:var(--ink-soft);padding:40px;">
+  No hay franjas horarias configuradas. <a href="{% url 'horarios:configuration' %}">Configura las franjas →</a>
+</div></div>
+{% endif %}
+
+{% if can_manage and schedule.status == 'DRAFT' %}
+<div class="schedule-save-bar" id="scheduleSaveBar" data-entry-create-url="{% url 'horarios:schedule_entry_create' schedule.pk %}" data-exit-url="{% url 'horarios:schedule_list' %}">
+  <span class="schedule-save-hint" id="scheduleSaveHint" hidden>Cambios sin guardar — pulsa Guardar para aplicarlos</span>
+  <button type="button" class="btn btn-primary" id="scheduleSaveBtn">Guardar</button>
+</div>
+
+<div id="saveModal">
+  <div class="modal-panel">
+    <h5 style="font-weight:800;margin-bottom:6px;">Guardar horario</h5>
+    <p style="color:var(--ink-soft);font-size:13px;margin-bottom:20px;">¿Quieres guardar los cambios y salir del editor o quedarte en esta pantalla?</p>
+    <div class="save-modal-actions">
+      <button type="button" class="btn btn-ghost" id="saveModalCancel">Cancelar</button>
+      <button type="button" class="btn" id="saveModalStay">Guardar y quedarte</button>
+      <button type="button" class="btn btn-primary" id="saveModalExit">Guardar y salir</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function syncModalCourseOptions(){
+  const deg = document.getElementById('degreeSelect');
+  const courseSel = document.getElementById('courseSelect');
+  const courseNum = document.getElementById('courseNumberSelect');
+  if (!deg || !courseSel) return;
+  const dval = deg.value;
+  courseSel.querySelectorAll('option[data-degree]').forEach(function(opt){
+    const ok = !dval || opt.getAttribute('data-degree') === dval;
+    opt.disabled = !ok;
+    if (!ok && opt.selected) courseSel.value = '';
+  });
+  if (courseNum && courseSel.value) {
+    courseNum.value = '';
+  }
+}
+
+function openGenModal(){
+  const year = document.getElementById('yearSelect');
+  if (year) year.value = '{{ schedule.academic_year_id }}';
+  const courseSel = document.getElementById('courseSelect');
+  const courseNum = document.getElementById('courseNumberSelect');
+  if (courseSel) {
+    {% if selected_course %}
+    courseSel.value = '{{ selected_course }}';
+    if (courseNum) courseNum.value = '';
+    {% else %}
+    courseSel.value = '';
+    {% endif %}
+  }
+  syncModalCourseOptions();
+  document.getElementById('genModal').style.display = 'flex';
+}
+function closeGenModal(){
+  document.getElementById('genModal').style.display = 'none';
+}
+function confirmGen(){
+  const day = document.getElementById('freeDaySelect').value;
+  const degree = document.getElementById('degreeSelect').value;
+  const year = document.getElementById('yearSelect').value;
+  const courseSel = document.getElementById('courseSelect');
+  const courseNum = document.getElementById('courseNumberSelect');
+  const courseVal = courseSel ? courseSel.value : '';
+  const courseNumberVal = courseNum && !courseVal ? courseNum.value : '';
+  if (degree && !year) {
+    showSchedToast('err', 'Si eliges una titulación, también debes seleccionar el año académico.');
+    return;
+  }
+  if (degree && courseVal) {
+    const opt = courseSel.options[courseSel.selectedIndex];
+    const od = opt.getAttribute('data-degree');
+    if (od && od !== degree) {
+      showSchedToast('err', 'El curso no pertenece a la titulación seleccionada.');
+      return;
+    }
+  }
+  document.getElementById('freeDayInput').value = day;
+  document.getElementById('degreeInput').value = degree;
+  document.getElementById('courseInput').value = courseVal || '';
+  document.getElementById('courseNumberInput').value = courseNumberVal || '';
+  document.getElementById('academicYearInput').value = year || "{{ schedule.academic_year_id }}";
+  document.getElementById('genModal').style.display = 'none';
+  document.getElementById('genForm').submit();
+}
+
+function quickGenAllCourse(number){
+  document.getElementById('freeDayInput').value = '';
+  document.getElementById('degreeInput').value = '';
+  document.getElementById('courseInput').value = '';
+  document.getElementById('courseNumberInput').value = String(number);
+  document.getElementById('academicYearInput').value = "{{ schedule.academic_year_id }}";
+  document.getElementById('genForm').submit();
+}
+
+(function initGenModalDegreeCourse(){
+  const deg = document.getElementById('degreeSelect');
+  const courseSel = document.getElementById('courseSelect');
+  const courseNum = document.getElementById('courseNumberSelect');
+  if (deg) deg.addEventListener('change', syncModalCourseOptions);
+  if (courseSel) {
+    courseSel.addEventListener('change', function(){
+      if (courseSel.value && courseNum) courseNum.value = '';
+    });
+  }
+  if (courseNum) {
+    courseNum.addEventListener('change', function(){
+      if (courseNum.value && courseSel) courseSel.value = '';
+    });
+  }
+})();
+
+(function initDensityToggle(){
+  const seg = document.getElementById('densitySeg');
+  if (!seg) return;
+  const buttons = seg.querySelectorAll('button[data-density]');
+  const root = document.body;
+  const storageKey = 'schedule_density';
+
+  function applyDensity(mode){
+    root.classList.toggle('compact-sched', mode === 'compact');
+    root.classList.toggle('ultra-compact-sched', mode === 'ultra');
+    buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.density === mode));
+    localStorage.setItem(storageKey, mode === 'compact' || mode === 'ultra' ? mode : 'normal');
+  }
+
+  const saved = localStorage.getItem(storageKey);
+  applyDensity(saved === 'compact' || saved === 'ultra' ? saved : 'normal');
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', function(){
+      const mode = this.dataset.density;
+      applyDensity(mode === 'compact' || mode === 'ultra' ? mode : 'normal');
+    });
+  });
+})();
+
+(function initMetaToggle(){
+  const seg = document.getElementById('metaSeg');
+  if (!seg) return;
+  const buttons = seg.querySelectorAll('button[data-meta]');
+  const root = document.body;
+  const storageKey = 'schedule_meta';
+
+  function applyMeta(mode){
+    const hide = mode === 'hide';
+    root.classList.toggle('hide-card-meta', hide);
+    buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.meta === mode));
+    localStorage.setItem(storageKey, hide ? 'hide' : 'show');
+  }
+
+  const saved = localStorage.getItem(storageKey);
+  applyMeta(saved === 'hide' ? 'hide' : 'show');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', function(){
+      applyMeta(this.dataset.meta === 'hide' ? 'hide' : 'show');
+    });
+  });
+})();
+
+(function initScheduleMoveAndSave(){
+  const saveBar = document.getElementById('scheduleSaveBar');
+  if (!saveBar) return;
+
+  const saveBtn = document.getElementById('scheduleSaveBtn');
+  const saveHint = document.getElementById('scheduleSaveHint');
+  const saveModal = document.getElementById('saveModal');
+  const saveModalCancel = document.getElementById('saveModalCancel');
+  const saveModalStay = document.getElementById('saveModalStay');
+  const saveModalExit = document.getElementById('saveModalExit');
+  const entryCreateUrl = saveBar.dataset.entryCreateUrl || '';
+  const exitUrl = saveBar.dataset.exitUrl || '/horarios/';
+  const pendingMoves = new Map();
+  const DRAG_THRESHOLD = 6;
+
+  function getCookie(name){
+    const cookies = document.cookie ? document.cookie.split(';') : [];
+    for (let i = 0; i < cookies.length; i += 1) {
+      const cookie = cookies[i].trim();
+      if (cookie.startsWith(name + '=')) return decodeURIComponent(cookie.substring(name.length + 1));
+    }
+    return '';
+  }
+
+  function getCsrf(){
+    let el = document.querySelector('meta[name="csrf-token"]');
+    let t = el ? el.getAttribute('content') : '';
+    if (t) return t;
+    let inp = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (inp && inp.value) return inp.value;
+    return getCookie('csrftoken');
+  }
+
+  function clearDropTargets(){
+    document.querySelectorAll('td.drop-slot.drop-target').forEach(function(s){
+      s.classList.remove('drop-target');
+    });
+  }
+
+  function updateSaveBar(){
+    const hasPending = pendingMoves.size > 0;
+    if (saveHint) saveHint.hidden = !hasPending;
+    if (saveBtn) saveBtn.disabled = false;
+  }
+
+  function removeEmptySlot(slot){
+    if (!slot) return;
+    slot.querySelectorAll('.slot-empty').forEach(function(el){ el.remove(); });
+  }
+
+  function addEmptySlot(slot){
+    if (!slot || slot.querySelector('.class-card') || slot.querySelector('.slot-empty') || !entryCreateUrl) return;
+    const a = document.createElement('a');
+    a.className = 'slot-empty';
+    a.href = entryCreateUrl;
+    a.style.textDecoration = 'none';
+    a.style.color = 'inherit';
+    a.innerHTML = '<span class="plus">+</span><span class="add-label">Añadir</span>';
+    slot.appendChild(a);
+  }
+
+  function slotKey(slot){
+    return slot.dataset.day + '|' + slot.dataset.start + '|' + slot.dataset.end;
+  }
+
+  function moveCardToSlot(card, targetSlot){
+    const sourceSlot = card.closest('td.drop-slot');
+    if (!targetSlot || !card) return false;
+    if (sourceSlot && slotKey(sourceSlot) === slotKey(targetSlot)) return false;
+
+    removeEmptySlot(targetSlot);
+    targetSlot.appendChild(card);
+    if (sourceSlot) addEmptySlot(sourceSlot);
+
+    pendingMoves.set(card.dataset.entryId, {
+      moveUrl: card.dataset.moveUrl,
+      day: targetSlot.dataset.day,
+      start: targetSlot.dataset.start,
+      end: targetSlot.dataset.end,
+    });
+    card.classList.add('move-pop');
+    updateSaveBar();
+    return true;
+  }
+
+  function slotFromPoint(x, y){
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest('td.drop-slot') : null;
+  }
+
+  let drag = null;
+
+  function endDrag(commit){
+    if (!drag) return;
+    document.body.classList.remove('schedule-dragging');
+    drag.card.classList.remove('is-dragging');
+    if (drag.ghost && drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+    clearDropTargets();
+    if (commit && drag.active && drag.hoverSlot) {
+      moveCardToSlot(drag.card, drag.hoverSlot);
+    }
+    drag = null;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  function onMouseMove(e){
+    if (!drag) return;
+    if (!drag.active) {
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      drag.active = true;
+      document.body.classList.add('schedule-dragging');
+      drag.card.classList.add('is-dragging');
+      const ghost = drag.card.cloneNode(true);
+      ghost.classList.add('class-card-ghost');
+      ghost.style.width = drag.card.offsetWidth + 'px';
+      document.body.appendChild(ghost);
+      drag.ghost = ghost;
+    }
+    if (drag.ghost) {
+      drag.ghost.style.left = (e.clientX + 12) + 'px';
+      drag.ghost.style.top = (e.clientY + 12) + 'px';
+    }
+    clearDropTargets();
+    const slot = slotFromPoint(e.clientX, e.clientY);
+    drag.hoverSlot = slot;
+    if (slot) slot.classList.add('drop-target');
+  }
+
+  function onMouseUp(e){
+    endDrag(true);
+  }
+
+  document.addEventListener('mousedown', function(e){
+    if (e.button !== 0) return;
+    const card = e.target.closest('.class-card-draggable');
+    if (!card || e.target.closest('.trash, button, form, a')) return;
+    e.preventDefault();
+    drag = {
+      card: card,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+      hoverSlot: null,
+      ghost: null,
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && drag) endDrag(false);
+  });
+
+  if (saveBtn) {
+    function openSaveModal(){
+      if (saveModal) saveModal.style.display = 'flex';
+    }
+    function closeSaveModal(){
+      if (saveModal) saveModal.style.display = 'none';
+    }
+
+    async function performSave(){
+      if (!pendingMoves.size) return { ok: true, saved: false };
+      const csrftoken = getCsrf();
+      if (!csrftoken) {
+        showSchedToast('err', 'Falta el token CSRF. Recarga la página e inténtalo otra vez.');
+        return { ok: false };
+      }
+      const errors = [];
+      for (const move of pendingMoves.values()) {
+        try {
+          const response = await fetch(move.moveUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRFToken': csrftoken,
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({ day: move.day, start: move.start, end: move.end }),
+          });
+          const raw = await response.text();
+          let data = {};
+          try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = { ok: false, errors: ['Respuesta inesperada del servidor.'] }; }
+          if (!response.ok || !data.ok) {
+            const msg = (data.errors && data.errors.length) ? data.errors.join(' / ') : 'No se pudo guardar un movimiento.';
+            errors.push(msg);
+          }
+        } catch (err) {
+          errors.push(err && err.message ? String(err.message) : 'Error de conexión.');
+        }
+      }
+      if (errors.length) {
+        showSchedToast('err', errors[0]);
+        return { ok: false };
+      }
+      pendingMoves.clear();
+      updateSaveBar();
+      return { ok: true, saved: true };
+    }
+
+    function setSaveModalBusy(busy){
+      [saveModalStay, saveModalExit, saveModalCancel, saveBtn].forEach(function(btn){
+        if (btn) btn.disabled = !!busy;
+      });
+    }
+
+    saveBtn.addEventListener('click', function(){
+      openSaveModal();
+    });
+
+    if (saveModalCancel) {
+      saveModalCancel.addEventListener('click', closeSaveModal);
+    }
+    if (saveModal) {
+      saveModal.addEventListener('click', function(e){
+        if (e.target === saveModal) closeSaveModal();
+      });
+    }
+
+    if (saveModalStay) {
+      saveModalStay.addEventListener('click', async function(){
+        setSaveModalBusy(true);
+        const result = await performSave();
+        setSaveModalBusy(false);
+        if (!result.ok) return;
+        closeSaveModal();
+        if (result.saved) {
+          showSchedToast('ok', 'Horario guardado. Sigues en el editor.');
+        } else {
+          showSchedToast('ok', 'No había cambios pendientes.');
+        }
+      });
+    }
+
+    if (saveModalExit) {
+      saveModalExit.addEventListener('click', async function(){
+        setSaveModalBusy(true);
+        const result = await performSave();
+        setSaveModalBusy(false);
+        if (!result.ok) return;
+        closeSaveModal();
+        if (result.saved) {
+          showSchedToast('ok', 'Horario guardado correctamente');
+        }
+        window.setTimeout(function(){ window.location.href = exitUrl; }, result.saved ? 240 : 0);
+      });
+    }
+  }
+})();
+</script>
+{% endblock %}

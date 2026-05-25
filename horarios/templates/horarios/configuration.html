@@ -1,0 +1,96 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Configuración | UCJC{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Configuración</b> · Franjas horarias</div>
+    <h1>Configuración de franjas</h1>
+  </div>
+  <button class="btn-brand" type="button" onclick="document.getElementById('addForm').style.display='block';this.style.display='none';">+ Añadir franja</button>
+</div>
+
+{% if not current_year %}
+<div class="card-x"><div class="body" style="color:#8B0000;">
+  ⚠ No hay año académico marcado como activo. Crea uno desde el panel de administración.
+</div></div>
+{% else %}
+
+<div id="addForm" class="card-x" style="display:none;margin-bottom:16px;">
+  <div class="head"><span class="title">Nueva franja</span></div>
+  <form method="post" class="body" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:end;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <div>
+      <label class="form-label">Día</label>
+      <select class="form-select" name="day_of_week" required>
+        {% for code, label in day_choices %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Hora inicio</label>
+      <input class="form-control" type="time" name="start_time" value="08:00" required>
+    </div>
+    <div>
+      <label class="form-label">Hora fin</label>
+      <input class="form-control" type="time" name="end_time" value="10:00" required>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-brand" type="submit">Crear</button>
+      <button class="btn-ghost" type="button" onclick="document.getElementById('addForm').style.display='none';">Cancelar</button>
+    </div>
+  </form>
+</div>
+
+<div class="card-x">
+  <div class="head"><span class="title">Año académico activo · {{ current_year.name }}</span></div>
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Día</th>
+        <th>Hora inicio</th>
+        <th>Hora fin</th>
+        <th>Activa</th>
+        <th style="text-align:right;">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ts in timeslots %}
+      <tr class="{% if not ts.is_active %}row-off{% endif %}">
+        <td><b>{{ ts.get_day_of_week_display }}</b></td>
+        <td>{{ ts.start_time|time:"H:i" }}</td>
+        <td>{{ ts.end_time|time:"H:i" }}</td>
+        <td>
+          <form method="post" style="margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="toggle">
+            <input type="hidden" name="ts_id" value="{{ ts.pk }}">
+            <label class="switch">
+              <input type="checkbox" {% if ts.is_active %}checked{% endif %} onchange="this.form.submit()">
+              <span class="knob"></span>
+            </label>
+          </form>
+        </td>
+        <td class="actions">
+          <form method="post" style="margin:0;display:inline;" onsubmit="return confirm('¿Eliminar esta franja?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="ts_id" value="{{ ts.pk }}">
+            <button class="btn-danger-soft" type="submit">Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:30px;">
+        No hay franjas horarias configuradas. Pulsa "+ Añadir franja" para empezar.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,28 @@
+databases:
+  - name: ucjc-horarios-db
+    plan: free
+    databaseName: ucjc_horarios
+    user: ucjc_horarios
+
+services:
+  - type: web
+    name: ucjc-horarios
+    runtime: python
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /login/
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_SECURE_COOKIES
+        value: "True"
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ucjc-horarios-db
+          property: connectionString
+    autoDeploy: true

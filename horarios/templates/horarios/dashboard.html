@@ -1,0 +1,24 @@
+{% extends 'horarios/base.html' %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumb"><b>Dashboard</b></div><h1>Resumen académico</h1></div>
+</div>
+<div class="card-x">
+  <div class="head"><span class="title">Horarios recientes</span></div>
+  <table class="tbl">
+    <thead><tr><th>Nombre</th><th>Año</th><th>Sesiones</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td><a href="{% url 'horarios:schedule_detail' s.pk %}" style="color:var(--brand);font-weight:700;text-decoration:none;">{{ s.name }}</a></td>
+        <td>{{ s.academic_year.name }}</td>
+        <td>{{ s.entries_count }}</td>
+        <td><span class="pill {% if s.status == 'APPROVED' %}approved{% elif s.status == 'REVIEW' %}review{% elif s.status == 'REJECTED' %}rejected{% else %}draft{% endif %}">{{ s.get_status_display }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">Sin horarios.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

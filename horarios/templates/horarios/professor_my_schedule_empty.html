@@ -1,0 +1,16 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Mi horario | UCJC{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><b>Profesorado</b> · Horario publicado</div>
+    <h1>Mi horario</h1>
+  </div>
+</div>
+<div class="card-x">
+  <div class="body" style="color:var(--c-muted);line-height:1.55;">
+    <p>No hay ningún horario <b>aprobado y publicado</b> para {{ current_year.name|default:"el año académico actual" }}.</p>
+    <p>Cuando Decanato apruebe el horario podrás consultar aquí tus clases asignadas.</p>
+  </div>
+</div>
+{% endblock %}

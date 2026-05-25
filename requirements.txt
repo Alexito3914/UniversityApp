@@ -1,0 +1,10 @@
+Django>=5.1,<5.3
+django-crispy-forms>=2.3,<3.0
+crispy-bootstrap5>=2024.2
+openpyxl>=3.1,<4.0
+gunicorn>=22.0,<24.0
+whitenoise>=6.7,<7.0
+psycopg2-binary>=2.9,<3.0
+
+# Solo desarrollo local
+django-debug-toolbar>=4.4,<5.0

@@ -1,0 +1,54 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Iniciar sesión | UcjcHorarios{% endblock %}
+{% block auth_content %}
+<div class="login-shell">
+  <div class="login-brand">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;background:#fff;color:var(--c-accent);border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:14px;">UH</div>
+      <div style="font-size:17px;font-weight:600;letter-spacing:-0.02em;">UcjcHorarios</div>
+    </div>
+    <div>
+      <h1 class="display" style="font-size:44px;line-height:1.05;font-weight:600;letter-spacing:-0.035em;">
+        Horarios académicos<br>
+        <span style="opacity:0.6;">sin conflictos.</span>
+      </h1>
+      <p style="margin-top:18px;font-size:14px;max-width:380px;opacity:0.9;line-height:1.55;">
+        Generación automática, edición manual y consulta para Dirección, profesorado y alumnado de la Escuela Politécnica.
+      </p>
+      <div class="row gap-6" style="margin-top:24px;flex-wrap:wrap;">
+        <span style="background:rgba(255,255,255,.15);padding:4px 10px;border-radius:999px;font-size:11px;font-family:var(--font-mono);">RF-04 workflow</span>
+        <span style="background:rgba(255,255,255,.15);padding:4px 10px;border-radius:999px;font-size:11px;font-family:var(--font-mono);">RNF-07 RBAC</span>
+      </div>
+    </div>
+    <div class="mono" style="font-size:10px;opacity:0.6;">v3 · Escuela Politécnica · UCJC</div>
+  </div>
+
+  <div class="login-form-wrap">
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      <h1 class="display" style="font-size:26px;font-weight:600;letter-spacing:-0.025em;">Inicia sesión</h1>
+      <p class="muted" style="margin-top:6px;font-size:13px;">Usa tus credenciales del sistema.</p>
+
+      <div class="col gap-12" style="margin-top:28px;">
+        <div>
+          <label class="label">Usuario</label>
+          <input class="input" type="text" name="username" autofocus required autocomplete="username">
+        </div>
+        <div>
+          <label class="label">Contraseña</label>
+          <input class="input" type="password" name="password" required autocomplete="current-password">
+        </div>
+        {% if form.errors %}
+        <div class="flash error">Credenciales incorrectas. Inténtalo de nuevo.</div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;">
+          Acceder →
+        </button>
+        <div style="margin-top:8px;padding:12px;background:var(--c-bg-soft);border:1px solid var(--c-border);border-radius:6px;font-size:12px;color:var(--c-text-soft);">
+          <b style="color:var(--c-text);">Demo</b> · decano / profesor / estudiante / it — contraseña: <b>ucjc1234</b>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

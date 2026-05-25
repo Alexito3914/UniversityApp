@@ -1,0 +1,72 @@
+{% if user_role == 'DEAN' or user_role == 'IT' %}
+  <div class="sidebar-section">Gestión</div>
+  <a class="nav-item {% if active_page == 'inicio' %}active{% endif %}" href="{% url 'horarios:home' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='dashboard' %}</span>
+    <span>Resumen</span>
+  </a>
+  <a class="nav-item {% if active_page == 'horarios' %}active{% endif %}" href="{% url 'horarios:schedule_list' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='edit' %}</span>
+    <span>Horarios</span>
+    {% if total_horarios %}<span class="nav-badge">{{ total_horarios }}</span>{% endif %}
+  </a>
+  <a class="nav-item {% if active_page == 'generador' %}active{% endif %}" href="{% url 'horarios:schedule_list' %}?status=DRAFT">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='generator' %}</span>
+    <span>Generador</span>
+  </a>
+  <a class="nav-item {% if active_page == 'workflow' %}active{% endif %}" href="{% url 'horarios:schedule_list' %}?status=REVIEW">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='workflow' %}</span>
+    <span>Aprobaciones</span>
+    {% if horarios_review %}<span class="nav-badge">{{ horarios_review }}</span>{% endif %}
+  </a>
+  <div class="sidebar-section">Configuración</div>
+  <a class="nav-item {% if active_page == 'configuracion' %}active{% endif %}" href="{% url 'horarios:configuration' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='config' %}</span>
+    <span>Marco temporal</span>
+  </a>
+  <a class="nav-item {% if active_page == 'titulaciones' %}active{% endif %}" href="{% url 'horarios:degree_list' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='users' %}</span>
+    <span>Titulaciones</span>
+  </a>
+  <a class="nav-item {% if active_page == 'ofertas' %}active{% endif %}" href="{% url 'horarios:subject_offering_create' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='list' %}</span>
+    <span>Ofertas docentes</span>
+  </a>
+  <div class="sidebar-section">Análisis</div>
+  <a class="nav-item {% if active_page == 'informes' %}active{% endif %}" href="{% url 'horarios:reports' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='report' %}</span>
+    <span>Informes</span>
+  </a>
+  <a class="nav-item {% if active_page == 'notificaciones' %}active{% endif %}" href="{% url 'horarios:notifications' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='audit' %}</span>
+    <span>Notificaciones</span>
+    {% if unread_notifications %}<span class="nav-badge">{{ unread_notifications }}</span>{% endif %}
+  </a>
+{% elif user_role == 'PROF' %}
+  <a class="nav-item {% if active_page == 'horarios' %}active{% endif %}" href="{% url 'horarios:professor_my_schedule' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='cal' %}</span>
+    <span>Mi horario</span>
+  </a>
+  <a class="nav-item {% if active_page == 'disponibilidad' %}active{% endif %}" href="{% url 'horarios:professor_availability' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='clock' %}</span>
+    <span>Disponibilidad</span>
+  </a>
+  <a class="nav-item {% if active_page == 'notificaciones' %}active{% endif %}" href="{% url 'horarios:notifications' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='bell' %}</span>
+    <span>Notificaciones</span>
+    {% if unread_notifications %}<span class="nav-badge">{{ unread_notifications }}</span>{% endif %}
+  </a>
+{% else %}
+  <a class="nav-item {% if active_page == 'horarios' %}active{% endif %}" href="{% url 'horarios:student_my_schedule' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='cal' %}</span>
+    <span>Mi horario</span>
+  </a>
+  <a class="nav-item {% if active_page == 'titulaciones' %}active{% endif %}" href="{% url 'horarios:student_schedule_setup' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='list' %}</span>
+    <span>Cambiar titulación</span>
+  </a>
+  <a class="nav-item {% if active_page == 'notificaciones' %}active{% endif %}" href="{% url 'horarios:notifications' %}">
+    <span class="nav-icon">{% include 'horarios/includes/icon.html' with name='bell' %}</span>
+    <span>Alertas</span>
+    {% if unread_notifications %}<span class="nav-badge">{{ unread_notifications }}</span>{% endif %}
+  </a>
+{% endif %}

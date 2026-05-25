@@ -1,0 +1,92 @@
+{% extends 'horarios/base.html' %}
+{% block title %}Horarios | UcjcHorarios{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="breadcrumb"><span>Gestión</span><span>{% if selected_status == 'REVIEW' %}Aprobaciones{% elif selected_status == 'DRAFT' %}Generador{% else %}Horarios{% endif %}</span></div>
+    <h1>{% if selected_status == 'REVIEW' %}Aprobaciones{% elif selected_status == 'DRAFT' %}Horarios en borrador{% else %}Horarios académicos{% endif %}</h1>
+    <p>{{ schedules|length }} registro{{ schedules|length|pluralize }} · workflow RF-04</p>
+  </div>
+  {% if can_manage %}
+  <div class="actions">
+    <a class="btn btn-primary" href="{% url 'horarios:schedule_create' %}">+ Nuevo horario</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card schedule-list-card">
+  <div class="card-hd">
+    <h2>Listado</h2>
+    <div class="actions">
+      <form method="get" class="seg">
+        <button type="submit" name="status" value="" class="{% if not selected_status %}active{% endif %}">Todos</button>
+        <button type="submit" name="status" value="DRAFT" class="{% if selected_status == 'DRAFT' %}active{% endif %}">Borradores</button>
+        <button type="submit" name="status" value="REVIEW" class="{% if selected_status == 'REVIEW' %}active{% endif %}">En revisión</button>
+        <button type="submit" name="status" value="APPROVED" class="{% if selected_status == 'APPROVED' %}active{% endif %}">Aprobados</button>
+      </form>
+    </div>
+  </div>
+  <div class="card-bd-flat schedule-table-wrap">
+    <table class="table schedule-list-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Año académico</th>
+          <th>Estado</th>
+          <th>Sesiones</th>
+          <th>Creado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in schedules %}
+        <tr>
+          <td>
+            <a href="{% url 'horarios:schedule_detail' s.pk %}" class="fw-600" style="text-decoration:none;color:var(--c-text);">{{ s.name }}</a>
+            <div class="mono fs-xs muted">#{{ s.pk }}</div>
+          </td>
+          <td>{{ s.academic_year.name }}</td>
+          <td>
+            <span class="chip chip-status {% if s.status == 'APPROVED' %}chip-ok{% elif s.status == 'REVIEW' %}chip-warn{% elif s.status == 'REJECTED' %}chip-err{% endif %}">
+              {{ s.get_status_display }}
+            </span>
+          </td>
+          <td class="tabular">{{ s.entries_count }}</td>
+          <td class="fs-sm muted">{{ s.created_at|date:"d M Y" }}</td>
+          <td class="actions-cell">
+            <details class="kebab">
+              <summary title="Acciones" aria-label="Acciones del horario">
+                <svg class="kebab-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="12" cy="19" r="1.75"/>
+                </svg>
+              </summary>
+              <div class="kebab-menu">
+                <a href="{% url 'horarios:schedule_detail' s.pk %}">Ver / Editor</a>
+                {% if user_role == 'DEAN' %}
+                <a href="{% url 'horarios:schedule_update' s.pk %}">Modificar</a>
+                <a href="{% url 'horarios:schedule_delete' s.pk %}" class="kebab-danger">Eliminar</a>
+                {% endif %}
+                {% if can_manage %}
+                  {% if s.status == 'DRAFT' %}
+                  <a href="{% url 'horarios:schedule_workflow' s.pk 'submit' %}">Enviar a revisión</a>
+                  {% elif s.status == 'REVIEW' and user_role == 'DEAN' %}
+                  <a href="{% url 'horarios:schedule_workflow' s.pk 'approve' %}">Aprobar</a>
+                  <a href="{% url 'horarios:schedule_workflow' s.pk 'reject' %}">Rechazar</a>
+                  {% elif s.status == 'REJECTED' %}
+                  <a href="{% url 'horarios:schedule_workflow' s.pk 'reopen' %}">Reabrir</a>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty">No hay horarios. {% if can_manage %}<a href="{% url 'horarios:schedule_create' %}">Crear uno</a>{% endif %}</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
