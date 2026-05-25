@@ -27,6 +27,10 @@ MORNING_END = datetime.time(15, 0)
 AFTERNOON_START = datetime.time(15, 30)
 AFTERNOON_END = datetime.time(21, 30)
 
+# Titulaciones fuente cuyas franjas puede reutilizar el Doble Grado (misma asignatura compartida).
+MIRROR_SOURCE_DEGREE_CODES = ('INF', 'ROB')
+DEGREE_GENERATION_ORDER = {'INF': 0, 'ROB': 1, 'TEL': 2, 'DINFROB': 3}
+
 
 def _is_morning_slot(slot):
     return MORNING_START <= slot.start_time and slot.end_time <= MORNING_END
@@ -57,6 +61,54 @@ def _course_slot_conflict(offering, other_offering):
     return True
 
 
+def _is_double_degree_mirror(schedule, offering, slot):
+    """
+    Clase compartida: la oferta de Doble Grado repite la misma sesión que INF o ROB
+    (misma asignatura, curso y cuatrimestre) en la misma franja.
+    """
+    if offering.course.degree_program.code != 'DINFROB':
+        return False
+    return ScheduleEntry.objects.filter(
+        schedule=schedule,
+        timeslot=slot,
+        subject_offering__subject_id=offering.subject_id,
+        subject_offering__semester=offering.semester,
+        subject_offering__course__number=offering.course.number,
+        subject_offering__course__degree_program__code__in=MIRROR_SOURCE_DEGREE_CODES,
+    ).exists()
+
+
+def _sibling_mirror_slots(schedule, offering):
+    """Franjas ya usadas por INF/ROB para la misma asignatura (mismo curso y cuatrimestre)."""
+    if offering.course.degree_program.code != 'DINFROB':
+        return []
+    seen = set()
+    slots = []
+    entries = ScheduleEntry.objects.filter(
+        schedule=schedule,
+        subject_offering__subject_id=offering.subject_id,
+        subject_offering__semester=offering.semester,
+        subject_offering__course__number=offering.course.number,
+        subject_offering__course__degree_program__code__in=MIRROR_SOURCE_DEGREE_CODES,
+    ).select_related('timeslot').order_by('timeslot__day_of_week', 'timeslot__start_time')
+    for entry in entries:
+        if entry.timeslot_id not in seen:
+            seen.add(entry.timeslot_id)
+            slots.append(entry.timeslot)
+    return slots
+
+
+def _offering_sort_key(offering):
+    deg_code = offering.course.degree_program.code
+    deg_order = DEGREE_GENERATION_ORDER.get(deg_code, 9)
+    return (
+        deg_order,
+        -offering.sessions_per_week(),
+        offering.course.number,
+        offering.subject.code,
+    )
+
+
 def _slot_conflicts(schedule, offering, slot):
     qs = ScheduleEntry.objects.filter(schedule=schedule, timeslot=slot).select_related(
         'subject_offering__professor', 'subject_offering__classroom', 'subject_offering__course'
@@ -84,7 +136,7 @@ def validate_schedule_entry(schedule, offering, slot, exclude_pk=None):
         .select_related('subject_offering__subject', 'subject_offering__course__degree_program')
         .first()
     )
-    if clash_prof:
+    if clash_prof and not _is_double_degree_mirror(schedule, offering, slot):
         other = clash_prof.subject_offering
         deg = other.course.degree_program.code
         subj_code = other.subject.code
@@ -100,7 +152,10 @@ def validate_schedule_entry(schedule, offering, slot, exclude_pk=None):
             f'(dentro de este mismo horario, cuenta cualquier titulación). '
             'No puede dar dos clases a la vez.'
         )
-    if qs.filter(subject_offering__classroom=offering.classroom).exists():
+    if (
+        qs.filter(subject_offering__classroom=offering.classroom).exists()
+        and not _is_double_degree_mirror(schedule, offering, slot)
+    ):
         errors.append('El aula ya está ocupada en esa franja.')
     course_clash = qs.filter(subject_offering__course=offering.course).select_related(
         'subject_offering__course'
@@ -309,9 +364,10 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
         offerings_qs = offerings_qs.filter(course_id=course_id)
     elif course_number is not None:
         offerings_qs = offerings_qs.filter(course__number=course_number)
-    offerings = list(offerings_qs.select_related('subject', 'course', 'professor', 'classroom').order_by(
-        '-subject__weekly_sessions', 'course__degree_program__code', 'course__number', 'subject__code'
-    ))
+    offerings = list(offerings_qs.select_related(
+        'subject', 'course', 'course__degree_program', 'professor', 'classroom',
+    ).order_by('course__degree_program__code'))  # queryset order overridden below
+    offerings.sort(key=_offering_sort_key)
 
     created = 0
     unresolved = []
@@ -344,6 +400,11 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
         # Selección de slots según turno del curso
         slots_pool = afternoon_slots if _uses_afternoon_shift(offering.course) else morning_slots
 
+        # Doble Grado: primero reutilizar la franja de INF/ROB para asignaturas compartidas
+        mirror_slots = _sibling_mirror_slots(schedule, offering)
+        if mirror_slots:
+            slots_pool = mirror_slots + [s for s in slots_pool if s.pk not in {m.pk for m in mirror_slots}]
+
         # Excluir día libre si se especificó (aplica a toda la titulación)
         if free_day:
             slots_pool = [s for s in slots_pool if s.day_of_week != free_day]
@@ -368,9 +429,10 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
             if hours_per_course[offering.course_id] + 2 > MAX_HOURS:
                 break
             course_key = (slot.pk, offering.course_id, _group_slot_key(offering.course, offering.group_name))
+            is_mirror = _is_double_degree_mirror(schedule, offering, slot)
             if (
-                (slot.pk, offering.professor_id) in busy_professor
-                or (slot.pk, offering.classroom_id) in busy_classroom
+                (not is_mirror and (slot.pk, offering.professor_id) in busy_professor)
+                or (not is_mirror and (slot.pk, offering.classroom_id) in busy_classroom)
                 or course_key in busy_course
             ):
                 continue

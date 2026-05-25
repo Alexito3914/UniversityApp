@@ -3,7 +3,7 @@ from datetime import time
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from horarios.models import Course, DegreeProgram, SubjectOffering, TimeSlotConfig
+from horarios.models import Course, DegreeProgram, ScheduleEntry, Subject, SubjectOffering, TimeSlotConfig
 from horarios.services import create_schedule_entry, generate_schedule_entries, validate_schedule_entry
 
 from .base import add_schedule_entry, build_schedule_lab
@@ -113,3 +113,57 @@ class ScheduleConstraintsTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             add_schedule_entry(self.schedule, off_ti_b, self.afternoon_slot)
+
+    def test_double_degree_mirrors_robotics_slot_for_shared_subject(self):
+        rob_degree = DegreeProgram.objects.create(code='ROB', name='Robotica', is_active=True)
+        dinfrob_degree = DegreeProgram.objects.create(code='DINFROB', name='Doble Grado', is_active=True)
+        rob_course = Course.objects.create(
+            degree_program=rob_degree, academic_year=self.year, number=1, shift='MORNING',
+        )
+        dinfrob_course = Course.objects.create(
+            degree_program=dinfrob_degree, academic_year=self.year, number=1, shift='MORNING',
+        )
+        shared = Subject.objects.create(code='MAT-1', name='Matematicas', weekly_sessions=1)
+        rob_offering = SubjectOffering.objects.create(
+            subject=shared, course=rob_course, professor=self.prof_1, classroom=self.room_1,
+            group_name='A', semester='S1', weekly_sessions=1,
+        )
+        dinfrob_offering = SubjectOffering.objects.create(
+            subject=shared, course=dinfrob_course, professor=self.prof_1, classroom=self.room_1,
+            group_name='A', semester='S1', weekly_sessions=1,
+        )
+        add_schedule_entry(self.schedule, rob_offering, self.morning_slot)
+
+        result = generate_schedule_entries(
+            self.schedule, clear_existing=False, degree_id=dinfrob_degree.pk,
+        )
+        self.assertGreaterEqual(result['created'], 1)
+        entry = ScheduleEntry.objects.get(schedule=self.schedule, subject_offering=dinfrob_offering)
+        self.assertEqual(entry.timeslot_id, self.morning_slot.pk)
+
+    def test_double_degree_mirror_allows_same_professor_and_classroom(self):
+        rob_degree = DegreeProgram.objects.create(code='ROB', name='Robotica', is_active=True)
+        dinfrob_degree = DegreeProgram.objects.create(code='DINFROB', name='Doble Grado', is_active=True)
+        rob_course = Course.objects.create(
+            degree_program=rob_degree, academic_year=self.year, number=1, shift='MORNING',
+        )
+        dinfrob_course = Course.objects.create(
+            degree_program=dinfrob_degree, academic_year=self.year, number=1, shift='MORNING',
+        )
+        shared = Subject.objects.create(code='FIS-1', name='Fisica', weekly_sessions=1)
+        rob_offering = SubjectOffering.objects.create(
+            subject=shared, course=rob_course, professor=self.prof_1, classroom=self.room_1,
+            group_name='A', semester='S1', weekly_sessions=1,
+        )
+        dinfrob_offering = SubjectOffering.objects.create(
+            subject=shared, course=dinfrob_course, professor=self.prof_1, classroom=self.room_1,
+            group_name='A', semester='S1', weekly_sessions=1,
+        )
+        add_schedule_entry(self.schedule, rob_offering, self.morning_slot)
+        add_schedule_entry(self.schedule, dinfrob_offering, self.morning_slot)
+        self.assertEqual(
+            ScheduleEntry.objects.filter(
+                schedule=self.schedule, timeslot=self.morning_slot,
+            ).count(),
+            2,
+        )
