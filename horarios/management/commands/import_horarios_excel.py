@@ -29,11 +29,16 @@ from horarios.models import (
 STUDY_MAP = {
     'Gininf': ('INF', 'Grado en Ingeniería Informática'),
     'GRobotica': ('ROB', 'Grado en Ingeniería Robótica'),
+    'GTransporte': ('TEL', 'Grado en Ingeniería Telemática'),
 }
+
+DOUBLE_DEGREE = ('DINFROB', 'Doble Grado Informática + Robótica')
+EPS_DEGREE_CODES = ('INF', 'ROB', 'TEL', 'DINFROB')
 
 DEGREE_CLASSROOMS = {
     'INF': ('LAB-INF', 'Laboratorio Informática', 30),
     'ROB': ('LAB-ROB', 'Laboratorio Robótica', 24),
+    'TEL': ('LAB-TEL', 'Laboratorio Telemática', 28),
 }
 
 DAY_MAP = {
@@ -91,6 +96,12 @@ def _parse_course_number(raw):
         return None
     m = re.search(r'(\d+)', str(raw))
     return int(m.group(1)) if m else None
+
+
+def _course_shift(degree_code, course_num):
+    if degree_code == 'DINFROB':
+        return 'AFTERNOON' if course_num >= 4 else 'MORNING'
+    return 'AFTERNOON' if course_num == 4 else 'MORNING'
 
 
 def _group_name(study, course_num, doble_val):
@@ -158,7 +169,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--clear-eps',
             action='store_true',
-            help='Borra ofertas/sesiones EPS (INF/ROB) antes de importar',
+            help='Borra ofertas/sesiones EPS (INF/ROB/TEL/DINFROB) antes de importar',
         )
 
     @transaction.atomic
@@ -186,9 +197,9 @@ class Command(BaseCommand):
 
         courses = {}
         for study, deg in degrees.items():
-            max_n = 4
-            for n in range(1, max_n + 1):
-                shift = 'AFTERNOON' if n == 4 else 'MORNING'
+            deg_code = STUDY_MAP[study][0]
+            for n in range(1, 5):
+                shift = _course_shift(deg_code, n)
                 course, _ = Course.objects.update_or_create(
                     degree_program=deg,
                     academic_year=year,
@@ -205,7 +216,9 @@ class Command(BaseCommand):
             classrooms[code] = room
 
         if options['clear_eps']:
-            deg_ids = [d.pk for d in degrees.values()]
+            deg_ids = list(
+                DegreeProgram.objects.filter(code__in=EPS_DEGREE_CODES).values_list('pk', flat=True)
+            )
             ScheduleEntry.objects.filter(
                 schedule__academic_year=year,
                 subject_offering__course__degree_program_id__in=deg_ids,
@@ -286,6 +299,9 @@ class Command(BaseCommand):
             )
             offering_count += 1
 
+        double_count = self._build_double_degree_offerings(year)
+        offering_count += double_count
+
         schedule_entries = 0
         if options['apply_schedule']:
             schedule, _ = Schedule.objects.get_or_create(
@@ -303,9 +319,72 @@ class Command(BaseCommand):
             + (f' · {schedule_entries} celdas del Excel' if options['apply_schedule'] else '')
         ))
         self.stdout.write(
-            'Titulaciones importadas: INF (Gininf), ROB (GRobotica). '
+            'Titulaciones importadas: INF (Gininf), ROB (GRobotica), TEL (GTransporte), '
+            f'DINFROB ({double_count} ofertas desde INF+ROB). '
             'Ejecuta con --apply-schedule para cargar la cuadrícula de referencia.'
         )
+
+    def _build_double_degree_offerings(self, year):
+        """
+        El Excel no tiene filas «Doble Grado»: se compone con las ofertas de
+        Informática y Robótica del mismo curso (1º–4º). 5º queda reservado (sin filas en Excel).
+        """
+        code, name = DOUBLE_DEGREE
+        degree, _ = DegreeProgram.objects.update_or_create(
+            code=code, defaults={'name': name, 'is_active': True},
+        )
+        dg_courses = {}
+        for n in range(1, 6):
+            shift = _course_shift(code, n)
+            course, _ = Course.objects.update_or_create(
+                degree_program=degree,
+                academic_year=year,
+                number=n,
+                defaults={'shift': shift},
+            )
+            dg_courses[n] = course
+
+        SubjectOffering.objects.filter(course__degree_program=degree, course__academic_year=year).delete()
+
+        created = 0
+        inf = DegreeProgram.objects.get(code='INF')
+        rob = DegreeProgram.objects.get(code='ROB')
+        for n in range(1, 5):
+            dg_course = dg_courses[n]
+            source_offerings = SubjectOffering.objects.filter(
+                course__academic_year=year,
+                course__number=n,
+                course__degree_program__in=[inf, rob],
+            ).select_related('subject', 'professor', 'classroom')
+            for src in source_offerings:
+                SubjectOffering.objects.update_or_create(
+                    subject=src.subject,
+                    course=dg_course,
+                    group_name=src.group_name,
+                    defaults={
+                        'professor': src.professor,
+                        'classroom': src.classroom,
+                    },
+                )
+                created += 1
+                if src.subject.name:
+                    shared_qs = Subject.objects.filter(
+                        offerings__course__degree_program__in=[inf, rob],
+                        offerings__course__number=n,
+                        name__iexact=src.subject.name,
+                    ).distinct()
+                    if shared_qs.count() >= 2 or (
+                        SubjectOffering.objects.filter(
+                            course__degree_program=inf, course__number=n, subject__name__iexact=src.subject.name,
+                        ).exists()
+                        and SubjectOffering.objects.filter(
+                            course__degree_program=rob, course__number=n, subject__name__iexact=src.subject.name,
+                        ).exists()
+                    ):
+                        src.subject.is_shared = True
+                        src.subject.save(update_fields=['is_shared', 'updated_at'])
+                        src.subject.degree_programs.set([inf, rob, degree])
+        return created
 
     def _ensure_timeslots(self, year):
         ScheduleEntry.objects.filter(timeslot__academic_year=year).delete()

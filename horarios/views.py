@@ -30,6 +30,7 @@ from .services import (
     MORNING_START,
     create_schedule_entry,
     generate_schedule_entries,
+    format_no_offerings_message,
     get_generation_report,
     suggest_slots_for_offering,
     validate_schedule_entry,
@@ -615,8 +616,8 @@ def schedule_generate(request, pk):
                 except ValueError:
                     messages.error(request, 'Año de estudios no válido.')
                     return redirect('horarios:schedule_detail', pk=schedule.pk)
-                if selected_course_number not in (1, 2, 3, 4):
-                    messages.error(request, 'Año de estudios no válido (debe ser 1, 2, 3 o 4).')
+                if selected_course_number not in (1, 2, 3, 4, 5):
+                    messages.error(request, 'Año de estudios no válido (debe ser 1, 2, 3, 4 o 5).')
                     return redirect('horarios:schedule_detail', pk=schedule.pk)
 
         result = generate_schedule_entries(
@@ -647,9 +648,12 @@ def schedule_generate(request, pk):
             else:
                 messages.warning(
                     request,
-                    'No hay ofertas docentes para el filtro seleccionado. '
-                    'Importa el Excel con «python manage.py import_horarios_excel --file ruta.xlsx --year '
-                    f'{schedule.academic_year.name} --clear-eps» o revisa titulación/curso.'
+                    format_no_offerings_message(
+                        schedule,
+                        degree_id=selected_degree,
+                        course_id=selected_course_pk,
+                        course_number=selected_course_number,
+                    ),
                 )
         elif created == 0 and unresolved:
             messages.warning(

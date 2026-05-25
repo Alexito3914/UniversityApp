@@ -36,11 +36,23 @@ def _is_afternoon_slot(slot):
     return AFTERNOON_START <= slot.start_time and slot.end_time <= AFTERNOON_END
 
 
+def _uses_afternoon_shift(course):
+    code = course.degree_program.code
+    n = course.number
+    if code == 'DINFROB':
+        return n >= 4
+    return n == 4
+
+
+def _group_slot_key(course, group_name):
+    return group_name if _uses_afternoon_shift(course) else ''
+
+
 def _course_slot_conflict(offering, other_offering):
-    """Un curso no puede tener dos clases a la vez, salvo 4º con grupos de especialidad distintos."""
+    """Un curso no puede tener dos clases a la vez, salvo turno tarde con grupos distintos."""
     if offering.course_id != other_offering.course_id:
         return False
-    if offering.course.number >= 4:
+    if _uses_afternoon_shift(offering.course):
         return offering.group_name == other_offering.group_name
     return True
 
@@ -93,7 +105,7 @@ def validate_schedule_entry(schedule, offering, slot, exclude_pk=None):
     course_clash = qs.filter(subject_offering__course=offering.course).select_related(
         'subject_offering__course'
     )
-    if offering.course.number >= 4:
+    if _uses_afternoon_shift(offering.course):
         course_clash = course_clash.filter(subject_offering__group_name=offering.group_name)
     if course_clash.exists():
         errors.append('El curso/grupo ya tiene otra clase en esa franja.')
@@ -104,10 +116,11 @@ def validate_schedule_entry(schedule, offering, slot, exclude_pk=None):
     is_afternoon_slot = _is_afternoon_slot(slot)
     is_morning_slot = _is_morning_slot(slot)
     course_number = offering.course.number
-    if is_afternoon_slot and course_number < 4:
+    if _uses_afternoon_shift(offering.course):
+        if not is_afternoon_slot:
+            errors.append('Este curso solo puede asignarse en franjas de tarde (15:30-21:30).')
+    elif is_afternoon_slot:
         errors.append('Las franjas de tarde solo están permitidas para 4º curso.')
-    if is_morning_slot and course_number >= 4:
-        errors.append('El 4º curso solo puede asignarse en franjas de tarde.')
     if not is_morning_slot and not is_afternoon_slot:
         errors.append('La franja no está dentro del horario permitido (09:00-15:00 o 15:30-21:30).')
 
@@ -193,6 +206,46 @@ def get_generation_report(schedule):
     return rows
 
 
+def format_no_offerings_message(schedule, degree_id=None, course_id=None, course_number=None):
+    """Mensaje claro cuando auto-generar no encuentra ofertas docentes para el filtro."""
+    from .models import Course, DegreeProgram
+
+    scope_parts = []
+    if course_id:
+        course = Course.objects.select_related('degree_program').filter(
+            pk=course_id, academic_year=schedule.academic_year,
+        ).first()
+        if course:
+            scope_parts.append(f'{course.degree_program.code} · {course.number}º')
+    else:
+        if degree_id:
+            degree = DegreeProgram.objects.filter(pk=degree_id).first()
+            if degree:
+                scope_parts.append(degree.code)
+        if course_number is not None:
+            scope_parts.append(f'{course_number}º curso')
+    scope = ' · '.join(scope_parts) if scope_parts else 'el filtro seleccionado'
+
+    available = list(
+        SubjectOffering.objects.filter(course__academic_year=schedule.academic_year)
+        .values_list('course__degree_program__code', 'course__number')
+        .distinct()
+        .order_by('course__degree_program__code', 'course__number')
+    )
+    msg = f'No hay ofertas docentes para {scope} en {schedule.academic_year.name}. '
+    if available:
+        labels = [f'{code} {num}º' for code, num in available]
+        shown = ', '.join(labels[:10])
+        if len(labels) > 10:
+            shown += f' (+{len(labels) - 10} más)'
+        msg += f'Ofertas cargadas: {shown}. '
+    msg += (
+        'Importa el Excel con «python manage.py import_horarios_excel --file ruta.xlsx '
+        f'--year {schedule.academic_year.name} --clear-eps» o crea ofertas en Ofertas docentes.'
+    )
+    return msg
+
+
 @transaction.atomic
 def generate_schedule_entries(schedule, clear_existing=False, free_day=None, degree_id=None, course_id=None, course_number=None):
     """
@@ -271,7 +324,7 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
     busy_course = set()
     for e in existing_entries:
         cnum = e.subject_offering.course.number
-        gname = e.subject_offering.group_name if cnum >= 4 else ''
+        gname = _group_slot_key(e.subject_offering.course, e.subject_offering.group_name)
         busy_course.add((e.timeslot_id, e.subject_offering.course_id, gname))
     planned_per_offering = defaultdict(int)
     for e in existing_entries:
@@ -284,8 +337,7 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
             continue
 
         # Selección de slots según turno del curso
-        course_number = offering.course.number
-        slots_pool = afternoon_slots if course_number >= 4 else morning_slots
+        slots_pool = afternoon_slots if _uses_afternoon_shift(offering.course) else morning_slots
 
         # Excluir día libre si se especificó (aplica a toda la titulación)
         if free_day:
@@ -310,7 +362,7 @@ def generate_schedule_entries(schedule, clear_existing=False, free_day=None, deg
             # Respetar máximo de 20h semanales por curso
             if hours_per_course[offering.course_id] + 2 > MAX_HOURS:
                 break
-            course_key = (slot.pk, offering.course_id, offering.group_name if course_number >= 4 else '')
+            course_key = (slot.pk, offering.course_id, _group_slot_key(offering.course, offering.group_name))
             if (
                 (slot.pk, offering.professor_id) in busy_professor
                 or (slot.pk, offering.classroom_id) in busy_classroom

@@ -46,8 +46,7 @@ class Command(BaseCommand):
         for code, degree in degrees.items():
             max_course = 5 if code == 'DINFROB' else 4
             for number in range(1, max_course + 1):
-                # Solo 4º curso va en tarde; el resto (incluido 5º del doble grado) va en mañana
-                shift = 'AFTERNOON' if number == 4 else 'MORNING'
+                shift = 'AFTERNOON' if (code == 'DINFROB' and number >= 4) or (code != 'DINFROB' and number == 4) else 'MORNING'
                 course, _ = Course.objects.update_or_create(
                     degree_program=degree, academic_year=year, number=number, defaults={'shift': shift}
                 )
@@ -121,7 +120,7 @@ class Command(BaseCommand):
 
         main_courses = [c for c in courses if c.number == 1][:4]
         idx = 0
-        for course in main_courses:
+        for course in courses:
             for subject in subjects[:5]:
                 SubjectOffering.objects.update_or_create(
                     subject=subject, course=course, group_name='Grupo A',

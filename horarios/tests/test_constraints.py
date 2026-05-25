@@ -43,7 +43,7 @@ class ScheduleConstraintsTests(TestCase):
             subject=self.subj_b, course=self.course_afternoon, professor=self.prof_2, classroom=self.room_2, group_name='4A',
         )
         errors_4th_in_morning = validate_schedule_entry(self.schedule, offering_4th, self.morning_slot)
-        self.assertTrue(any('4º curso' in e.lower() for e in errors_4th_in_morning))
+        self.assertTrue(any('tarde' in e.lower() for e in errors_4th_in_morning))
 
         errors_invalid_time = validate_schedule_entry(self.schedule, self.offering_a, self.invalid_slot)
         self.assertTrue(any('09:00-15:00' in e for e in errors_invalid_time))
