@@ -7,6 +7,9 @@ Write-Host "Preparando base de datos demo..." -ForegroundColor Cyan
 & ".\.venv\Scripts\python.exe" manage.py migrate --noinput
 & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput 2>$null
 & ".\.venv\Scripts\python.exe" manage.py seed_demo
+if (Test-Path ".\data\HORARIOS_25_26.xlsx") {
+  & ".\.venv\Scripts\python.exe" manage.py import_horarios_excel --year 2026-2027 --clear-eps --apply-schedule
+}
 
 $env:DJANGO_DEBUG = "True"
 $env:DJANGO_ALLOW_ALL_HOSTS = "True"

@@ -137,16 +137,19 @@ def _parse_professor_name(raw):
     return first_name, last_name, email
 
 
+DEFAULT_EXCEL = Path(__file__).resolve().parents[3] / 'data' / 'HORARIOS_25_26.xlsx'
+
+
 class Command(BaseCommand):
     help = 'Importa asignaturas/profesores/ofertas desde HORARIOS_25_26.xlsx (hoja Listado).'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--file',
-            default=r'c:\Users\aniet\Downloads\HORARIOS_25_26.xlsx',
+            default=str(DEFAULT_EXCEL),
             help='Ruta al Excel del decanato',
         )
-        parser.add_argument('--year', default='2025-26', help='Nombre del año académico')
+        parser.add_argument('--year', default='2026-2027', help='Nombre del año académico (debe coincidir con el horario borrador)')
         parser.add_argument(
             '--apply-schedule',
             action='store_true',
